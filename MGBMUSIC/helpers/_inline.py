@@ -6,6 +6,7 @@
 # Powered By   : MGB NOT FREE (@MGB_NOT_FREE_1)
 # Type         : API Based Telegram Music Bot
 #
+# Bot          : @Yasmeen_api_bot
 # Channel      : https://t.me/MGB_SUPPROT_GROUP
 # Group        : https://t.me/mgb_not_free_coder
 # GitHub       : https://github.com/mgbnotfree-creator/MGBMusic

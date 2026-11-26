@@ -14,7 +14,6 @@
 # Unauthorized copying, modification, or redistribution
 # of this source code without permission is prohibited.
 # ==========================================================
-
 import asyncio
 import random
 import re
@@ -26,14 +25,12 @@ from py_yt import VideosSearch
 from MGBMUSIC import config, logger
 from MGBMUSIC.helpers import Track, utils
 
-# Titles that are long compilations / non-songs - never autoplay these
 _SKIP_WORDS = re.compile(
     r"jukebox|nonstop|non-stop|mashup|playlist|full album|podcast|episode|"
     r"compilation|\bhours?\b|\b\d+\s*songs\b|reaction|interview|trailer|"
     r"lyrical\s+video\s+live|karaoke|status",
     re.I,
 )
-# Noise stripped from a title to build a clean search query
 _NOISE = re.compile(
     r"\(.*?\)|\[.*?\]|official|video|audio|lyrics?|lyrical|full song|"
     r"hd|4k|song|music|\|.*$",
@@ -49,15 +46,11 @@ def _norm(title: str) -> str:
 
 
 class Autoplay:
-    """Finds the next song when the queue runs out (from the playing song's YouTube Mix playlist, search as fallback)."""
-
     def __init__(self):
-        # Last 50 played video ids / titles per chat, so songs don't repeat
         self._ids: dict[int, deque] = defaultdict(lambda: deque(maxlen=50))
         self._titles: dict[int, deque] = defaultdict(lambda: deque(maxlen=50))
 
     def remember(self, chat_id: int, media) -> None:
-        """Mark a played track as recent."""
         if not media:
             return
         self._ids[chat_id].append(media.id)
@@ -96,7 +89,6 @@ class Autoplay:
 
     @staticmethod
     def _mix_entries(video_id: str) -> list[dict]:
-        """Blocking: songs of the YouTube Mix (auto playlist) of `video_id`."""
         opts = {
             "quiet": True,
             "no_warnings": True,
@@ -119,10 +111,9 @@ class Autoplay:
         return [e for e in (info.get("entries") or []) if e]
 
     async def _from_playlist(self, chat_id: int, last, max_sec: int) -> Track | None:
-        """Next song from the playlist (YouTube Mix) of the song that just played."""
         vid_last = getattr(last, "id", None)
         if not vid_last or not re.fullmatch(r"[A-Za-z0-9_-]{11}", str(vid_last)):
-            return None  # not a YouTube song (e.g. Telegram file)
+            return None
         try:
             entries = await asyncio.wait_for(
                 asyncio.to_thread(self._mix_entries, str(vid_last)), timeout=40
@@ -157,7 +148,6 @@ class Autoplay:
         data, secs = random.choice(candidates[:8])
         vid = data["id"]
         if secs is None:
-            # flat entry had no duration -> look it up for this one song only
             try:
                 results = (await VideosSearch(vid, limit=1).next()).get("result") or []
                 dur = results[0].get("duration") if results else None
@@ -186,19 +176,15 @@ class Autoplay:
         return track
 
     async def find_next(self, chat_id: int, last) -> Track | None:
-        """Return a fresh Track from the playlist of `last`, or None if nothing found."""
         self.remember(chat_id, last)
         max_sec = min(MAX_SECONDS, config.DURATION_LIMIT)
 
-        # 1) Preferred: a song from the playlist (YouTube Mix) of the song that just played
         track = await self._from_playlist(chat_id, last, max_sec)
         if track:
             return track
 
-        # 2) Fallback: search based
-
         queries = self._queries(last)
-        queries.append("latest hindi songs")  # final fallback
+        queries.append("latest hindi songs")
 
         for query in queries:
             try:
@@ -227,7 +213,6 @@ class Autoplay:
             if not candidates:
                 continue
 
-            # Pick randomly among the top few so it doesn't loop on one pattern
             data, secs = random.choice(candidates[:4])
             thumbs = data.get("thumbnails") or [{}]
             track = Track(
@@ -243,7 +228,6 @@ class Autoplay:
                 user="🔁 ᴀᴜᴛᴏᴘʟᴀʏ",
                 user_id=None,
             )
-            # Remember by full title too, so a different upload of the same song is skipped
             self._ids[chat_id].append(track.id)
             self._titles[chat_id].append(_norm(data["title"])[:20])
             return track
@@ -252,4 +236,3 @@ class Autoplay:
 
 
 autoplay = Autoplay()
-  

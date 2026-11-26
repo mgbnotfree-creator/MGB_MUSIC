@@ -1,0 +1,82 @@
+# ==========================================================
+# Copyright (C) 2026 MGB NOT FREE CODER (@MGB_NOT_FREE)
+# Project : MGBMUSIC
+# Group   : https://t.me/mgb_not_free_coder
+# Channel : https://t.me/MGB_SUPPROT_GROUP
+# All rights reserved.
+# ==========================================================
+
+# ── Secrets & local config (NEVER commit these) ───────────
+.env
+.env.*
+# MGBMUSIC.env is the template (no real values) and must stay tracked
+!MGBMUSIC.env
+*.session
+*.session-journal
+*.session.*
+*.pem
+*.key
+cookies.txt
+cookies/
+*.cookies
+
+# ── Runtime files created by the bot ──────────────────────
+log.txt
+log.txt.*
+*.log
+downloads/
+cache/
+raw_files/
+*.mp3
+*.mp4
+*.m4a
+*.webm
+*.opus
+*.ogg
+*.wav
+*.flac
+*.mkv
+*.mov
+
+# ── Python ────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+.eggs/
+build/
+dist/
+pip-wheel-metadata/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ── Virtual environments ──────────────────────────────────
+venv/
+.venv/
+env/
+ENV/
+
+# ── Node (some tools use it for yt-dlp JS runtime) ────────
+node_modules/
+
+# ── Editors & OS junk ─────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Archives & backups ────────────────────────────────────
+*.zip
+*.tar
+*.tar.gz
+*.bak
+*.orig
+*.rej

@@ -1,0 +1,22 @@
+# ==========================================================
+# Copyright (C) 2026 MGB NOT FREE CODER (@MGB_NOT_FREE)
+# Project : MGBMUSIC
+# Group   : https://t.me/mgb_not_free_coder
+# Channel : https://t.me/MGB_SUPPROT_GROUP
+# All rights reserved.
+# ==========================================================
+
+# Fly.io:  fly launch --no-deploy --copy-config  ->   fly secrets set BOT_TOKEN=... (see DEPLOY.md)   ->   fly deploy
+app = "mgbmusic"
+primary_region = "sin"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[processes]
+  app = "bash start"
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1

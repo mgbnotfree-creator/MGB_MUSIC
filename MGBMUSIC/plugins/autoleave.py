@@ -61,4 +61,4 @@ async def autoleave_command(_, m: Message) -> None:
             "• `/autoleave enable`\n"
             "• `/autoleave disable`</blockquote>"
         )
-      
+        

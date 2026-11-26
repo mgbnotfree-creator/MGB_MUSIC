@@ -3,6 +3,7 @@
 # Project : MGBMUSIC
 # Group   : https://t.me/mgb_not_free_coder
 # Channel : https://t.me/MGB_SUPPROT_GROUP
+# GitHub  : https://github.com/mgbnotfree-creator/MGBMusic
 # All rights reserved.
 # ==========================================================
 from pathlib import Path
@@ -30,14 +31,6 @@ def _list_modules():
             modules.append(module_path)
 
     return modules
-
-
-def get_module_html_buttons() -> list[str]:
-    """Generate HTML buttons for each loaded module in MGBMUSIC."""
-    return [
-        f'<button type="button" data-module="{mod}">{mod}</button>'
-        for mod in sorted(_list_modules())
-    ]
 
 
 all_modules = frozenset(sorted(_list_modules()))

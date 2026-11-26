@@ -1,0 +1,9 @@
+# ==========================================================
+# Copyright (C) 2026 MGB NOT FREE CODER (@MGB_NOT_FREE)
+# Project : MGBMUSIC
+# Group   : https://t.me/mgb_not_free_coder
+# Channel : https://t.me/MGB_SUPPROT_GROUP
+# All rights reserved.
+# ==========================================================
+
+worker: bash start

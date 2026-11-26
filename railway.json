@@ -1,0 +1,13 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "comment": "Copyright (C) 2026 MGB NOT FREE CODER (@MGB_NOT_FREE) | Project: MGBMUSIC | Group: https://t.me/mgb_not_free_coder | Channel: https://t.me/MGB_SUPPROT_GROUP",
+  "build": {
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "Dockerfile"
+  },
+  "deploy": {
+    "startCommand": "bash start",
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10
+  }
+}

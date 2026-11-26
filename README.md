@@ -1,6 +1,7 @@
 <div align="center">
 
-<img src="https://artistbox.bond/f/odklxlnu.svg" width="100%" height="500">
+<img width="1983" height="793" alt="Neon Moonlight MGBMusic Telegram Banner" src="https://github.com/user-attachments/assets/ca82d7fd-8aa5-4aa5-8133-c9450ce7484e" />
+
 
 <br>
 <br><br>

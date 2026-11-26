@@ -6,66 +6,59 @@
 # GitHub  : https://github.com/mgbnotfree-creator/MGBMusic
 # All rights reserved.
 # ==========================================================
-
-from pyrogram import filters, types
+from pyrogram import filters
+from pyrogram.types import Message
 
 from MGBMUSIC import app, db
-from MGBMUSIC.helpers import can_manage_vc, utils
 
 
-@app.on_message(filters.command(["autoplay", "cautoplay"]) & filters.group & ~app.bl_users)
-@can_manage_vc
-async def _autoplay(_, m: types.Message):
-    try:
-        await m.delete()
-    except Exception:
-        pass
-
-    # Determine target chat_id:
-    # - /cautoplay → explicitly use linked channel
-    # - /autoplay  → use channel if channel-play is active, else group
-    is_explicit_channel = m.command[0].lower() == "cautoplay"
-    chat_id = m.chat.id
-
-    channel_id = await db.get_cmode(m.chat.id)
-
-    if is_explicit_channel:
-        if channel_id is None:
-            return await m.reply_text(
-                "<blockquote>❌ Channel play is not enabled.\n\n"
-                "Use /channelplay to enable it first.</blockquote>"
-            )
-        chat_id = channel_id
-    elif channel_id is not None:
-        # /autoplay in a group that has channel-play active → target channel
-        chat_id = channel_id
-
-    current = await db.get_autoplay(chat_id)
-
-    # Toggle autoplay
-    new_state = not current
-    await db.set_autoplay(chat_id, new_state)
-
-    # Send this event to the logger group too
-    await utils.autoplay_log(
-        m.chat, m.from_user, new_state, source=f"/{m.command[0].lower()}",
-        target_chat_id=chat_id, link=m.link,
-    )
-
-    if new_state:
-        text = (
-            "<blockquote>🎵 <b>Autoplay: ON</b>\n\n"
-            "Just use /play once — the rest of the songs will keep playing on their own!\n"
-            "When the queue ends, I will automatically find and play a similar song.\n"
-            "If nobody is left in the VC, autoplay will turn off automatically when the song ends.\n\n"
-            "Use /autoplay again to turn it off.</blockquote>"
+@app.on_message(
+    filters.command(["autoleave"])
+    & filters.group
+    & ~app.bl_users
+)
+async def autoleave_command(_, m: Message) -> None:
+    """Handle /autoleave enable or /autoleave disable command."""
+    
+    # Check if user is sudo user
+    if m.from_user.id not in app.sudoers:
+        return await m.reply_text(
+            "❌ ᴏɴʟʏ ꜱᴜᴅᴏ ᴜꜱᴇʀꜱ ᴄᴀɴ ᴜꜱᴇ ᴛʜɪꜱ ᴄᴏᴍᴍᴀɴᴅ."
+        )
+    
+    # Check if subcommand is provided
+    if len(m.command) < 2:
+        current_status = await db.get_autoleave(m.chat.id)
+        status_text = "ᴇɴᴀʙʟᴇᴅ" if current_status else "ᴅɪꜱᴀʙʟᴇᴅ"
+        return await m.reply_text(
+            f"<blockquote>🔧 ᴀᴜᴛᴏ ʟᴇᴀᴠᴇ ꜱᴛᴀᴛᴜꜱ: {status_text}</blockquote>\n\n"
+            "<blockquote><b>ᴜꜱᴀɢᴇ:</b>\n"
+            "• `/autoleave enable` - ᴇɴᴀʙʟᴇ ᴀᴜᴛᴏ ʟᴇᴀᴠᴇ\n"
+            "• `/autoleave disable` - ᴅɪꜱᴀʙʟᴇ ᴀᴜᴛᴏ ʟᴇᴀᴠᴇ</blockquote>\n\n"
+            "<blockquote><i>ᴡʜᴇɴ ᴇɴᴀʙʟᴇᴅ, ᴀꜱꜱɪꜱᴛᴀɴᴛ ᴡɪʟʟ ʟᴇᴀᴠᴇ ᴠᴏɪᴄᴇ ᴄʜᴀᴛ ᴀꜰᴛᴇʀ 5 ᴍɪɴᴜᴛᴇꜱ "
+            "ɪꜰ ɴᴏ ᴜꜱᴇʀꜱ ᴀʀᴇ ʟɪꜱᴛᴇɴɪɴɢ.</i></blockquote>"
+        )
+    
+    subcommand = m.command[1].lower()
+    
+    if subcommand == "enable":
+        await db.set_autoleave(m.chat.id, True)
+        await m.reply_text(
+            "✅ <blockquote>ᴀᴜᴛᴏ ʟᴇᴀᴠᴇ ᴇɴᴀʙʟᴇᴅ!</blockquote>\n\n"
+            "<blockquote>ᴀꜱꜱɪꜱᴛᴀɴᴛ ᴡɪʟʟ ʟᴇᴀᴠᴇ ᴠᴏɪᴄᴇ ᴄʜᴀᴛ ᴀꜰᴛᴇʀ <b>5 ᴍɪɴᴜᴛᴇꜱ</b> "
+            "ɪꜰ ɴᴏ ᴜꜱᴇʀꜱ ᴀʀᴇ ʟɪꜱᴛᴇɴɪɴɢ.</blockquote>"
+        )
+    elif subcommand == "disable":
+        await db.set_autoleave(m.chat.id, False)
+        await m.reply_text(
+            "✅ <blockquote>ᴀᴜᴛᴏ ʟᴇᴀᴠᴇ ᴅɪꜱᴀʙʟᴇᴅ!</blockquote>\n\n"
+            "<blockquote>ᴀꜱꜱɪꜱᴛᴀɴᴛ ᴡɪʟʟ ꜱᴛᴀʏ ɪɴ ᴠᴏɪᴄᴇ ᴄʜᴀᴛ ᴇᴠᴇɴ ᴡʜᴇɴ ɴᴏ ᴏɴᴇ ɪꜱ ʟɪꜱᴛᴇɴɪɴɢ.</blockquote>"
         )
     else:
-        text = (
-            "<blockquote>⏹ <b>Autoplay: OFF</b>\n\n"
-            "Autoplay has been turned off. Playback will stop when the queue ends.\n\n"
-            "Use /autoplay again to turn it on.</blockquote>"
+        await m.reply_text(
+            "❌ <blockquote>ɪɴᴠᴀʟɪᴅ ꜱᴜʙᴄᴏᴍᴍᴀɴᴅ!</blockquote>\n\n"
+            "<blockquote><b>ᴜꜱᴀɢᴇ:</b>\n"
+            "• `/autoleave enable`\n"
+            "• `/autoleave disable`</blockquote>"
         )
-
-    await m.reply_text(text)
-                
+        

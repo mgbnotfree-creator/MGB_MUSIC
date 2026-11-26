@@ -1,0 +1,19 @@
+# ==========================================================
+# Copyright (C) 2026 MGB NOT FREE CODER (@MGB_NOT_FREE)
+# Project : MGBMUSIC
+# Group   : https://t.me/mgb_not_free_coder
+# Channel : https://t.me/MGB_SUPPROT_GROUP
+# All rights reserved.
+# ==========================================================
+aiohttp~=3.13.2
+kurigram~=2.2.17
+pillow~=12.0.0
+fonttools>=4.50.0
+psutil~=7.2.1
+pymongo~=4.15.5
+pytgcrypto~=1.2.11
+py-tgcalls~=2.2.8
+py-yt-search~=0.5.5
+python-dotenv~=1.2.1
+yt-dlp[default]>=2026.3.3
+imageio-ffmpeg

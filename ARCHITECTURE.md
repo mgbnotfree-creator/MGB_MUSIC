@@ -15,8 +15,11 @@ Made by **MGB NOT FREE CODER** · [@MGB_NOT_FREE](https://github.com/mgbnotfree-
 
 MGBMUSIC is a single async Python process. It runs a **bot account** (talks to users) and one to three **assistant accounts** (join voice chats and stream audio/video). Songs come from the **MGBMUSIC API**, with a yt-dlp + cookies fallback. **MongoDB** stores settings, and a private **logger group** doubles as a song cache.
 
-```mermaid
-flowchart LR
+
+
+| Piece | Role |
+|---|---|
+| Bot (BOT_TOKEN) | Receives commands, sendsflowchart LR
     U[Telegram users] -->|commands / buttons| B[Bot client<br/>core/bot.py]
     B --> P[Plugins<br/>plugins/ + MGBMUSIC/]
     P --> Q[Queue<br/>helpers/_queue.py]
@@ -28,11 +31,8 @@ flowchart LR
     T --> UB[Assistant accounts<br/>core/userbot.py]
     UB -->|audio / video| VC[Voice chat]
     P <--> M[(MongoDB<br/>core/mongo.py)]
-    H[HTTP health server<br/>:$PORT] -.->|keep-alive for hosts| Host[Render / Fly / …]
-
-| Piece | Role |
-|---|---|
-| Bot (BOT_TOKEN) | Receives commands, sends messages, buttons, thumbnails |
+    H[HTTP health server<br/>PORT] -.->|keep-alive| Host[Render / Fly / VPS]
+    messages, buttons, thumbnails |
 | Assistant(s) (STRING_SESSION, 2, 3) | Real user accounts that join the voice chat and play the stream |
 | py-tgcalls | Streams media into the voice chat (uses FFmpeg) |
 | MGBMUSIC API | Resolves a YouTube ID to a stream URL / file |

@@ -10,14 +10,14 @@ Sab platforms Docker use karte hain (ffmpeg install ho jata hai → music + anim
 | `MONGO_DB_URI` | ✅ | MongoDB connection string |
 | `OWNER_ID` | ✅ | Aapki Telegram ID |
 | `LOGGER_ID` | ✅ | Logger group ID (`-100…`). **Song cache bhi isi se chalta hai** |
-| `ARTISTBOTS_KEY` | ✅ | ArtistBots API key. Log in at https://artistbotsapi.bond to get it |
+| `MGBMUSIC_KEY` | ✅ | MGBMUSIC API key. Log in at https://artistbotsapi.bond to get it |
 | `API_ID`, `API_HASH` | ✅ | my.telegram.org se |
-| `ARTISTBOTS_API_URL` | ❌ | Default `https://api.artistbotsapi.bond` |
+| `MGBMUSIC_API_URL` | ❌ | Default `https://api.artistbotsapi.bond` |
 
 Bot ko Logger group me add karke admin banao (cache ke liye file bhejne ki permission chahiye).
 
 ## Render
-1. Repo GitHub par push karo.
+1. Repo GitHub par push karo (`https://github.com/mgbnotfree-creator/MGBMusic`).
 2. Render → **New → Blueprint** → repo select karo (`render.yaml` apne aap padh leta hai).
 3. Env variables bharo → Deploy.
    *Free web service 15 min idle par sleep ho jati hai; 24x7 ke liye `plan: starter` karo ya uptime monitor se `/` ping karo.*
@@ -26,7 +26,7 @@ Bot ko Logger group me add karke admin banao (cache ke liye file bhejne ki permi
 ```bash
 heroku create your-app-name
 heroku stack:set container
-heroku config:set BOT_TOKEN=... STRING_SESSION=... MONGO_DB_URI=... OWNER_ID=... LOGGER_ID=... ARTISTBOTS_KEY=... API_ID=... API_HASH=...
+heroku config:set BOT_TOKEN=... STRING_SESSION=... MONGO_DB_URI=... OWNER_ID=... LOGGER_ID=... MGBMUSIC_KEY=... API_ID=... API_HASH=...
 git push heroku main
 heroku ps:scale worker=1
 

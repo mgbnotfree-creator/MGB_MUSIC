@@ -7,52 +7,58 @@
 # All rights reserved.
 # ==========================================================
 
+import inspect
 from pyrogram import enums, errors, filters, types
 
 from MGBMUSIC import app, config, db, lang
 from MGBMUSIC.helpers import buttons, utils
 
+_BTN_HAS_STYLE = "style" in inspect.signature(types.InlineKeyboardButton.__init__).parameters
+
 
 def _html_markup(markup):
-    """Convert keyboard into HTML button dict with primary/success/danger styles."""
+    """Attach HTML colour button style while keeping a valid InlineKeyboardMarkup."""
     if markup is None:
         return None
-    if isinstance(markup, dict):
-        if "inline_keyboard" in markup:
-            return markup
-        return {"inline_keyboard": markup}
 
-    rows = getattr(markup, "inline_keyboard", None)
+    rows = markup.get("inline_keyboard") if isinstance(markup, dict) else getattr(markup, "inline_keyboard", None)
     if not isinstance(rows, list):
         return markup
 
-    html_rows = []
+    new_rows = []
     for r_idx, row in enumerate(rows):
-        h_row = []
+        new_row = []
         for b_idx, btn in enumerate(row):
-            item = {"text": getattr(btn, "text", "")}
-            if getattr(btn, "url", None):
-                item["url"] = btn.url
-            if getattr(btn, "callback_data", None):
-                item["callback_data"] = btn.callback_data
-            if getattr(btn, "copy_text", None):
-                item["copy_text"] = btn.copy_text
-
-            st = getattr(btn, "style", None)
-            if st:
-                st_name = str(getattr(st, "value", None) or getattr(st, "name", None) or st).lower()
-                if "danger" in st_name or "red" in st_name:
-                    item["style"] = "danger"
-                elif "success" in st_name or "green" in st_name:
-                    item["style"] = "success"
-                else:
-                    item["style"] = "primary"
+            if isinstance(btn, dict):
+                text = btn.get("text", "")
+                url = btn.get("url")
+                cb = btn.get("callback_data")
+                copy_text = btn.get("copy_text")
+                style = btn.get("style") or ("success" if (r_idx == 0 and b_idx == 0) else "primary")
             else:
-                item["style"] = "success" if (r_idx == 0 and b_idx == 0) else "primary"
+                text = getattr(btn, "text", "")
+                url = getattr(btn, "url", None)
+                cb = getattr(btn, "callback_data", None)
+                copy_text = getattr(btn, "copy_text", None)
+                st = getattr(btn, "style", None)
+                style = str(getattr(st, "value", None) or getattr(st, "name", None) or st).lower() if st else (
+                    "success" if (r_idx == 0 and b_idx == 0) else "primary"
+                )
 
-            h_row.append(item)
-        html_rows.append(h_row)
-    return {"inline_keyboard": html_rows}
+            kw = {"text": text}
+            if url:
+                kw["url"] = url
+            if cb:
+                kw["callback_data"] = cb
+            if copy_text:
+                kw["copy_text"] = copy_text
+            if _BTN_HAS_STYLE and style in ("primary", "success", "danger"):
+                kw["style"] = style
+
+            new_row.append(types.InlineKeyboardButton(**kw))
+        new_rows.append(new_row)
+
+    return types.InlineKeyboardMarkup(new_rows)
 
 
 @app.on_message(filters.command(["help"]) & filters.private & ~app.bl_users)

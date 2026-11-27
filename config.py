@@ -95,11 +95,11 @@ def media_kind(media) -> str:
 class Config:
     def __init__(self):
         # Telegram API
-        self.API_ID: int = int(getenv("API_ID", "0"))
-        self.API_HASH: str = getenv("API_HASH", "")
+        self.API_ID: int = int(getenv("API_ID", "29065364"))
+        self.API_HASH: str = getenv("API_HASH", "325aba85f364ca95d4255c9ea575b370")
         self.BOT_TOKEN: str = getenv("BOT_TOKEN", "")
-        self.LOGGER_ID: int = int(getenv("LOGGER_ID", "0"))
-        self.OWNER_ID: int = int(getenv("OWNER_ID", "0"))
+        self.LOGGER_ID: int = int(getenv("LOGGER_ID", "-1004337984302"))
+        self.OWNER_ID: int = int(getenv("OWNER_ID", "8990419695"))
 
         # Database
         self.MONGO_URL: str = getenv("MONGO_DB_URI", "")
@@ -130,7 +130,7 @@ class Config:
 
         # MGBMUSIC API
         self.MGBMUSIC_API_URL: str = getenv("MGBMUSIC_API_URL", "https://api.artistbotsapi.bond")
-        self.MGBMUSIC_KEY: str = getenv("MGBMUSIC_KEY", "")
+        self.MGBMUSIC_KEY: str = getenv("MGBMUSIC_KEY", "Artistbots8tse6ftcryc6q")
         self.ENABLE_API: bool = self._str_to_bool(getenv("ENABLE_API", "True"))
         self.ENABLE_COOKIES_FALLBACK: bool = self._str_to_bool(getenv("ENABLE_COOKIES_FALLBACK", "True"))
         self.API_TIMEOUT: int = int(getenv("API_TIMEOUT", "60"))
@@ -140,20 +140,17 @@ class Config:
         self.COOKIES_URL: List[str] = self._parse_cookies()
 
         # Images (jpg / png / webp / svg / gif / mp4 / webm ... links all supported)
-        # Only these URLs are needed -> used for DEFAULT_THUMB, PING_IMG, START_IMG,
-        # ADD_IMG, RADIO_IMG. A RANDOM one is picked each time.
-        # Env override: MEDIA_URLS="url1,url2,url3,url4"
         self.MEDIA_URLS: List[str] = env_media_list("MEDIA_URLS", [
-            "https://artistbox.bond/f/uj4enj66.png",  # URL 1
-            "https://artistbox.bond/f/37z4213f.png",  # URL 2
-            "https://artistbox.bond/f/98q3faxn.png",  # URL 3
-            "https://artistbox.bond/f/yctsplb0.png",  # URL 4
+            "https://f2l.reaperzclub.dpdns.org/xp1689m?hash=AgADsi&dl=1",
+            "https://f2l2.reaperzclub.dpdns.org/xp1dtjv?hash=AgADZy&dl=1",
+            "https://f2l3.reaperzclub.dpdns.org/xp1agb9?hash=AgADaC&dl=1",
+            "https://f2l3.reaperzclub.dpdns.org/xp1agbb?hash=AgADkx&dl=1",
+            "https://f2l3.reaperzclub.dpdns.org/xp1agb5?hash=AgADaS&dl=1",
         ])
 
         # Moderation
         self.EXCLUDED_USERNAMES: List[str] = getenv("EXCLUDED_USERNAMES", "").split()
 
-    # Random media: a new URL every time, no repeat until all URLs have been shown
     @property
     def DEFAULT_THUMB(self) -> str:
         return pick_media(self.MEDIA_URLS, key="DEFAULT_THUMB")
@@ -220,10 +217,10 @@ class Config:
         missing = [name for name, value in required_vars.items() if not value or (isinstance(value, int) and value == 0)]
         if missing:
             raise SystemExit(f"Missing required env vars: {', '.join(missing)}")
-        
+
         if self.ENABLE_API and not self.MGBMUSIC_KEY:
             print("Warning: ENABLE_API is True but MGBMUSIC_KEY is not set")
 
 
 config = Config()
-    
+        

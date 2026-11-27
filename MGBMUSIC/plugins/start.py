@@ -7,58 +7,106 @@
 # All rights reserved.
 # ==========================================================
 
-import inspect
+import os
+import aiohttp
 from pyrogram import enums, errors, filters, types
 
 from MGBMUSIC import app, config, db, lang
 from MGBMUSIC.helpers import buttons, utils
 
-_BTN_HAS_STYLE = "style" in inspect.signature(types.InlineKeyboardButton.__init__).parameters
 
-
-def _html_markup(markup):
-    """Attach HTML colour button style while keeping a valid InlineKeyboardMarkup."""
+def _html_kb(markup, first_style: str = "success"):
+    """Convert markup into Bot API HTML inline_keyboard with color styles."""
     if markup is None:
         return None
+    if isinstance(markup, dict):
+        if "inline_keyboard" in markup:
+            return markup
+        return {"inline_keyboard": markup}
 
-    rows = markup.get("inline_keyboard") if isinstance(markup, dict) else getattr(markup, "inline_keyboard", None)
+    rows = getattr(markup, "inline_keyboard", None)
     if not isinstance(rows, list):
-        return markup
+        return None
 
-    new_rows = []
+    kb = []
     for r_idx, row in enumerate(rows):
-        new_row = []
+        h_row = []
         for b_idx, btn in enumerate(row):
-            if isinstance(btn, dict):
-                text = btn.get("text", "")
-                url = btn.get("url")
-                cb = btn.get("callback_data")
-                copy_text = btn.get("copy_text")
-                style = btn.get("style") or ("success" if (r_idx == 0 and b_idx == 0) else "primary")
+            item = {"text": getattr(btn, "text", "")}
+            if getattr(btn, "url", None):
+                item["url"] = btn.url
+            if getattr(btn, "callback_data", None):
+                item["callback_data"] = btn.callback_data
+            if getattr(btn, "copy_text", None):
+                item["copy_text"] = btn.copy_text
+
+            if r_idx == 0 and b_idx == 0:
+                item["style"] = first_style
+            elif "close" in str(item.get("callback_data", "")).lower():
+                item["style"] = "danger"
             else:
-                text = getattr(btn, "text", "")
-                url = getattr(btn, "url", None)
-                cb = getattr(btn, "callback_data", None)
-                copy_text = getattr(btn, "copy_text", None)
-                st = getattr(btn, "style", None)
-                style = str(getattr(st, "value", None) or getattr(st, "name", None) or st).lower() if st else (
-                    "success" if (r_idx == 0 and b_idx == 0) else "primary"
-                )
+                item["style"] = "primary"
 
-            kw = {"text": text}
-            if url:
-                kw["url"] = url
-            if cb:
-                kw["callback_data"] = cb
-            if copy_text:
-                kw["copy_text"] = copy_text
-            if _BTN_HAS_STYLE and style in ("primary", "success", "danger"):
-                kw["style"] = style
+            h_row.append(item)
+        kb.append(h_row)
+    return {"inline_keyboard": kb}
 
-            new_row.append(types.InlineKeyboardButton(**kw))
-        new_rows.append(new_row)
 
-    return types.InlineKeyboardMarkup(new_rows)
+async def _send_html_reply(message: types.Message, text: str, markup, photo=None, quote: bool = True):
+    token = getattr(config, "BOT_TOKEN", None) or os.getenv("BOT_TOKEN")
+    kb = _html_kb(markup)
+
+    if token and kb:
+        timeout = aiohttp.ClientTimeout(total=15)
+        try:
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                if photo:
+                    first_photo = str(photo).split()[0] if isinstance(photo, str) else photo
+                    url = f"https://api.telegram.org/bot{token}/sendPhoto"
+                    payload = {
+                        "chat_id": message.chat.id,
+                        "photo": first_photo,
+                        "caption": text,
+                        "parse_mode": "HTML",
+                        "reply_markup": kb,
+                    }
+                else:
+                    url = f"https://api.telegram.org/bot{token}/sendMessage"
+                    payload = {
+                        "chat_id": message.chat.id,
+                        "text": text,
+                        "parse_mode": "HTML",
+                        "link_preview_options": {"is_disabled": True},
+                        "reply_markup": kb,
+                    }
+
+                if quote:
+                    payload["reply_parameters"] = {
+                        "message_id": message.id,
+                        "allow_sending_without_reply": True,
+                    }
+
+                async with session.post(url, json=payload) as resp:
+                    data = await resp.json()
+                    if data.get("ok"):
+                        return data.get("result")
+        except Exception:
+            pass
+
+    if photo:
+        return await utils.reply(
+            message,
+            photo=photo,
+            caption=text,
+            reply_markup=markup,
+            quote=quote,
+        )
+    return await utils.reply(
+        message,
+        text=text,
+        reply_markup=markup,
+        quote=quote,
+    )
 
 
 @app.on_message(filters.command(["help"]) & filters.private & ~app.bl_users)
@@ -71,18 +119,18 @@ async def _help(_, m: types.Message):
         pass
 
     try:
-        await utils.reply(
+        await _send_html_reply(
             m,
+            text=m.lang["help_menu"],
+            markup=buttons.help_markup(m.lang),
             photo=config.START_IMG,
-            caption=m.lang["help_menu"],
-            reply_markup=_html_markup(buttons.help_markup(m.lang)),
             quote=True,
         )
     except Exception:
-        await utils.reply(
+        await _send_html_reply(
             m,
             text=m.lang["help_menu"],
-            reply_markup=_html_markup(buttons.help_markup(m.lang)),
+            markup=buttons.help_markup(m.lang),
             quote=True,
         )
 
@@ -113,22 +161,22 @@ async def start(_, message: types.Message):
         if private
         else message.lang["start_gp"].format(app.name)
     )
-    key = _html_markup(buttons.start_key(message.lang, private))
+    key = buttons.start_key(message.lang, private)
 
     try:
-        await utils.reply(
+        await _send_html_reply(
             message,
+            text=_text,
+            markup=key,
             photo=config.START_IMG,
-            caption=_text,
-            reply_markup=key,
             quote=not private,
         )
     except errors.ChatSendPhotosForbidden:
         try:
-            await utils.reply(
+            await _send_html_reply(
                 message,
                 text=_text,
-                reply_markup=key,
+                markup=key,
                 quote=not private,
             )
         except Exception:
@@ -155,13 +203,11 @@ async def settings(_, message: types.Message):
     admin_only = await db.get_play_mode(message.chat.id)
     force_admin = await db.get_force_mode(message.chat.id)
     _language = "en"
-    await utils.safe_text(
+    await _send_html_reply(
         message,
-        message.lang["start_settings"].format(message.chat.title),
-        reply_markup=_html_markup(
-            buttons.settings_markup(
-                message.lang, admin_only, force_admin, _language, message.chat.id
-            )
+        text=message.lang["start_settings"].format(message.chat.title),
+        markup=buttons.settings_markup(
+            message.lang, admin_only, force_admin, _language, message.chat.id
         ),
         quote=True,
     )

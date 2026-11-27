@@ -11,6 +11,11 @@ import logging
 from logging.handlers import RotatingFileHandler
 from typing import List
 
+try:
+    asyncio.get_event_loop()
+except RuntimeError:
+    asyncio.set_event_loop(asyncio.new_event_loop())
+
 # Configure logging
 logging.basicConfig(
     format="[%(asctime)s - %(levelname)s] - %(name)s: %(message)s",
@@ -131,3 +136,4 @@ async def stop() -> None:
     await db.close()
     
     logger.info("✅ Bot stopped successfully.\n")
+    

@@ -141,11 +141,9 @@ class Config:
 
         # Images (jpg / png / webp / svg / gif / mp4 / webm ... links all supported)
         self.MEDIA_URLS: List[str] = env_media_list("MEDIA_URLS", [
-            "https://f2l.reaperzclub.dpdns.org/xp1689m?hash=AgADsi&dl=1",
-            "https://f2l2.reaperzclub.dpdns.org/xp1dtjv?hash=AgADZy&dl=1",
-            "https://f2l3.reaperzclub.dpdns.org/xp1agb9?hash=AgADaC&dl=1",
-            "https://f2l3.reaperzclub.dpdns.org/xp1agbb?hash=AgADkx&dl=1",
-            "https://f2l3.reaperzclub.dpdns.org/xp1agb5?hash=AgADaS&dl=1",
+            "https://f2l3.reaperzclub.dpdns.org/xp1agap?hash=AgAD6R&dl=1",
+            "https://f2l3.reaperzclub.dpdns.org/xp1agav?hash=AgADsi&dl=1",
+            "https://f2l2.reaperzclub.dpdns.org/xp1dtjf?hash=AgAD6h&dl=1",
         ])
 
         # Moderation
@@ -223,4 +221,4 @@ class Config:
 
 
 config = Config()
-        
+    

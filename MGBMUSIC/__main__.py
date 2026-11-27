@@ -31,7 +31,17 @@ if sys.platform != "win32":
 from MGBMUSIC import (tune, app, config, db,
                    logger, stop, userbot, yt, html_button)
 from MGBMUSIC.plugins import all_modules
-from MGBMUSIC.MGBMUSIC import all_modules as mgbmusic_modules
+
+mgbmusic_modules = []
+_mgb_pkg_name = None
+for _pkg in ("MGBMUSIC.MGBBOTS", "MGBMUSIC.MGBMUSIC", "MGBBOTS"):
+    try:
+        _mod = importlib.import_module(_pkg)
+        mgbmusic_modules = getattr(_mod, "all_modules", [])
+        _mgb_pkg_name = _pkg
+        break
+    except ModuleNotFoundError:
+        continue
 
 
 # Bot menu commands (shown in Telegram's command menu)
@@ -103,17 +113,17 @@ def run_http_server():
 
 async def main():
     try:
-        # Step 1: Validate required environment variables
+        # Step 1: Start HTTP server immediately for Render port binding
+        http_thread = threading.Thread(target=run_http_server, daemon=True)
+        http_thread.start()
+        logger.info("🌐 HTTP server thread started for Render health checks")
+
+        # Step 2: Validate required environment variables
         try:
             config.check()
         except SystemExit as e:
             logger.error(str(e))
             return
-
-        # Step 2: Start HTTP server in a separate thread (for Render)
-        http_thread = threading.Thread(target=run_http_server, daemon=True)
-        http_thread.start()
-        logger.info("🌐 HTTP server thread started for Render health checks")
 
         # Step 3: Connect to MongoDB database
         await db.connect()
@@ -133,12 +143,13 @@ async def main():
                 importlib.import_module(f"MGBMUSIC.plugins.{module}")
             except Exception as e:
                 logger.error(f"Failed to load plugin {module}: {e}", exc_info=True)
-        # MGBMUSIC group-manager modules (MGBMUSIC/MGBMUSIC/)
-        for module in mgbmusic_modules:
-            try:
-                importlib.import_module(f"MGBMUSIC.MGBMUSIC.{module}")
-            except Exception as e:
-                logger.error(f"Failed to load MGBMUSIC module {module}: {e}", exc_info=True)
+        # Group-manager modules
+        if _mgb_pkg_name:
+            for module in mgbmusic_modules:
+                try:
+                    importlib.import_module(f"{_mgb_pkg_name}.{module}")
+                except Exception as e:
+                    logger.error(f"Failed to load MGBMUSIC module {module}: {e}", exc_info=True)
         logger.info(f"🔌 Loaded {len(all_modules) + len(mgbmusic_modules)} plugin modules.")
 
         # Set Telegram command menu
@@ -191,3 +202,4 @@ if __name__ == "__main__":
                 loop.stop()
         except:
             pass
+        

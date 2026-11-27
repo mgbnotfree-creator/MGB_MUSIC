@@ -14,7 +14,6 @@
 # Unauthorized copying, modification, or redistribution
 # of this source code without permission is prohibited.
 # ==========================================================
-
 import asyncio
 
 from pyrogram import enums, errors, types
@@ -26,15 +25,13 @@ from MGBMUSIC.core.mongo import NoAssistantAvailable
 def checkUB(play):
     async def wrapper(_, m: types.Message):
         async def safe_reply(text):
-            """Safely send reply, return None if chat doesn't allow messages"""
             try:
                 return await m.reply_text(text)
             except (errors.ChatWriteForbidden, errors.ChatSendPlainForbidden):
-                # Chat doesn't allow text messages - silently return
                 return None
             except Exception:
                 return None
-        
+
         if not m.from_user:
             await safe_reply(m.lang["play_user_invalid"])
             return
@@ -44,8 +41,7 @@ def checkUB(play):
             return await app.leave_chat(m.chat.id)
 
         if not m.reply_to_message and (
-            len(m.command) < 2 or (len(m.command)
-                                   == 2 and m.command[1] == "-f")
+            len(m.command) < 2 or (len(m.command) == 2 and m.command[1] == "-f")
         ):
             await safe_reply(m.lang["play_usage"])
             return
@@ -65,9 +61,8 @@ def checkUB(play):
             await safe_reply(m.lang["play_video_disabled"])
             return
         video = video_requested
-        
+
         url = yt.url(m)
-        # Only validate URL if not replying to media (Telegram files have t.me URLs)
         if url and not m.reply_to_message and not yt.valid(url):
             return await m.reply_text(m.lang["play_unsupported"])
 
@@ -99,7 +94,7 @@ def checkUB(play):
                         await app.unban_chat_member(
                             chat_id=m.chat.id, user_id=client.id
                         )
-                    except:
+                    except Exception:
                         await safe_reply(
                             m.lang["play_banned"].format(
                                 app.name,
@@ -125,7 +120,7 @@ def checkUB(play):
                     invite_link = m.chat.username
                     try:
                         await client.resolve_peer(invite_link)
-                    except:
+                    except Exception:
                         pass
                 else:
                     try:
@@ -143,21 +138,9 @@ def checkUB(play):
                             f"Please promote me as admin with the required permissions.</blockquote>"
                         )
                         return
-                    except errors.ChatAdminRequired:
-                        await safe_reply(
-                            f"<blockquote><b>🔐 Bot Admin Required</b></blockquote>\n\n"
-                            f"<blockquote>To play music in this chat, I need to be an <b>administrator</b>.\n\n"
-                            f"<b>Required permissions:</b>\n"
-                            f"• Manage Voice Chats\n"
-                            f"• Invite Users via Link\n"
-                            f"• Delete Messages\n\n"
-                            f"Please promote me as admin with the required permissions.</blockquote>"
-                        )
-                        return
                     except Exception as ex:
                         await safe_reply(
-                            m.lang["play_invite_error"].format(
-                                type(ex).__name__)
+                            m.lang["play_invite_error"].format(type(ex).__name__)
                         )
                         return
 
@@ -183,17 +166,16 @@ def checkUB(play):
                                     f"• Delete Messages\n\n"
                                     f"Please promote me as admin with the required permissions.</blockquote>"
                                 )
-                            except:
+                            except Exception:
                                 pass
                         return
                     except Exception as ex:
                         if umm:
                             try:
                                 await umm.edit_text(
-                                    m.lang["play_invite_error"].format(
-                                        type(ex).__name__)
+                                    m.lang["play_invite_error"].format(type(ex).__name__)
                                 )
-                            except:
+                            except Exception:
                                 pass
                         return
                 except errors.ChatAdminRequired:
@@ -208,7 +190,7 @@ def checkUB(play):
                                 f"• Delete Messages\n\n"
                                 f"Please promote me as admin with the required permissions.</blockquote>"
                             )
-                        except:
+                        except Exception:
                             pass
                     return
                 except Exception as ex:
@@ -217,20 +199,20 @@ def checkUB(play):
                             await umm.edit_text(
                                 m.lang["play_invite_error"].format(type(ex).__name__)
                             )
-                        except:
+                        except Exception:
                             pass
                     return
 
                 if umm:
                     try:
                         await umm.delete()
-                    except:
+                    except Exception:
                         pass
                 await client.resolve_peer(m.chat.id)
 
         try:
             await m.delete()
-        except:
+        except Exception:
             pass
 
         return await play(_, m, force, url, cplay, video)

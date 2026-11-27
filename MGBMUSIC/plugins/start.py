@@ -13,6 +13,48 @@ from MGBMUSIC import app, config, db, lang
 from MGBMUSIC.helpers import buttons, utils
 
 
+def _html_markup(markup):
+    """Convert keyboard into HTML button dict with primary/success/danger styles."""
+    if markup is None:
+        return None
+    if isinstance(markup, dict):
+        if "inline_keyboard" in markup:
+            return markup
+        return {"inline_keyboard": markup}
+
+    rows = getattr(markup, "inline_keyboard", None)
+    if not isinstance(rows, list):
+        return markup
+
+    html_rows = []
+    for r_idx, row in enumerate(rows):
+        h_row = []
+        for b_idx, btn in enumerate(row):
+            item = {"text": getattr(btn, "text", "")}
+            if getattr(btn, "url", None):
+                item["url"] = btn.url
+            if getattr(btn, "callback_data", None):
+                item["callback_data"] = btn.callback_data
+            if getattr(btn, "copy_text", None):
+                item["copy_text"] = btn.copy_text
+
+            st = getattr(btn, "style", None)
+            if st:
+                st_name = str(getattr(st, "value", None) or getattr(st, "name", None) or st).lower()
+                if "danger" in st_name or "red" in st_name:
+                    item["style"] = "danger"
+                elif "success" in st_name or "green" in st_name:
+                    item["style"] = "success"
+                else:
+                    item["style"] = "primary"
+            else:
+                item["style"] = "success" if (r_idx == 0 and b_idx == 0) else "primary"
+
+            h_row.append(item)
+        html_rows.append(h_row)
+    return {"inline_keyboard": html_rows}
+
+
 @app.on_message(filters.command(["help"]) & filters.private & ~app.bl_users)
 @lang.language()
 async def _help(_, m: types.Message):
@@ -27,14 +69,14 @@ async def _help(_, m: types.Message):
             m,
             photo=config.START_IMG,
             caption=m.lang["help_menu"],
-            reply_markup=buttons.help_markup(m.lang),
+            reply_markup=_html_markup(buttons.help_markup(m.lang)),
             quote=True,
         )
     except Exception:
         await utils.reply(
             m,
             text=m.lang["help_menu"],
-            reply_markup=buttons.help_markup(m.lang),
+            reply_markup=_html_markup(buttons.help_markup(m.lang)),
             quote=True,
         )
 
@@ -65,7 +107,7 @@ async def start(_, message: types.Message):
         if private
         else message.lang["start_gp"].format(app.name)
     )
-    key = buttons.start_key(message.lang, private)
+    key = _html_markup(buttons.start_key(message.lang, private))
 
     try:
         await utils.reply(
@@ -110,8 +152,10 @@ async def settings(_, message: types.Message):
     await utils.safe_text(
         message,
         message.lang["start_settings"].format(message.chat.title),
-        reply_markup=buttons.settings_markup(
-            message.lang, admin_only, force_admin, _language, message.chat.id
+        reply_markup=_html_markup(
+            buttons.settings_markup(
+                message.lang, admin_only, force_admin, _language, message.chat.id
+            )
         ),
         quote=True,
     )
@@ -129,3 +173,4 @@ async def _new_member(_, message: types.Message):
             if await db.is_chat(message.chat.id):
                 return
             await db.add_chat(message.chat.id)
+                

@@ -16,7 +16,7 @@
 # ==========================================================
 #
 # Plugin   : Group settings (pin / photo / title / description)
-# Location : MGBMUSIC/Artistbots/grouphandler.py
+# Location : MGBMUSIC/MGBBOTS/grouphandler.py
 #
 #   /pin /unpin (reply)  /setphoto (reply to photo)  /removephoto
 #   /settitle <text>     /setdescription <text>   (alias: /setdiscription)

@@ -14,7 +14,6 @@
 # Unauthorized copying, modification, or redistribution
 # of this source code without permission is prohibited.
 # ==========================================================
-
 import re
 from urllib.parse import urlparse
 
@@ -53,13 +52,12 @@ class Utilities:
             return f"{bytes / 1024:.2f} KB"
 
     def format_duration(self, seconds: int) -> str:
-        """Format duration as HH:MM:SS or MM:SS depending on length."""
-        if seconds >= 3600:  # 1 hour or more
+        if seconds >= 3600:
             hours = seconds // 3600
             minutes = (seconds % 3600) // 60
             secs = seconds % 60
             return f"{hours}:{minutes:02d}:{secs:02d}"
-        else:  # Less than 1 hour
+        else:
             minutes = seconds // 60
             secs = seconds % 60
             return f"{minutes:02d}:{secs:02d}"
@@ -83,7 +81,7 @@ class Utilities:
                     return await app.get_users(m.group(0))
                 if m := re.search(r"\b\d{6,15}\b", msg.text):
                     return await app.get_users(int(m.group(0)))
-            except:
+            except Exception:
                 pass
 
         return None
@@ -117,13 +115,6 @@ class Utilities:
         target_chat_id: int | None = None,
         link: str | None = None,
     ) -> None:
-        """Send an autoplay ON/OFF event to the logger group.
-
-        chat   : the chat where the command/button was used (message.chat)
-        user   : the user who toggled it (from_user)
-        source : "command" or "button"
-        target_chat_id : chat whose autoplay actually changed (channel-play case)
-        """
         try:
             if not await db.is_logger():
                 return
@@ -148,7 +139,6 @@ class Utilities:
             pass
 
     async def send_log(self, m: types.Message) -> None:
-        """Log new user to logger group when they start the bot in private chat."""
         await app.send_message(
             chat_id=app.logger,
             text=m.lang["log_user"].format(
@@ -158,14 +148,11 @@ class Utilities:
             ),
         )
 
-    # ---- media type detection (photo / gif / mp4 etc.) ----
     def media_kind(self, media) -> str:
-        """Return "animation", "video", "svg" or "photo" based on the link's extension."""
         from config import media_kind
         return media_kind(media)
 
     def input_media(self, media, caption: str | None = None, spoiler: bool = False):
-        """InputMedia* object matching the link type (for edit_media)."""
         kind = self.media_kind(media)
         if kind == "animation":
             return types.InputMediaAnimation(media=media, caption=caption, has_spoiler=spoiler)
@@ -185,7 +172,6 @@ class Utilities:
         spoiler: bool = False,
         **kwargs,
     ) -> types.Message:
-        """Send jpg/png/webp as photo, gif/mp4 as animation, other videos as video."""
         if spoiler:
             kwargs["has_spoiler"] = True
         kind = self.media_kind(media)
@@ -225,7 +211,6 @@ class Utilities:
         )
 
     def close_markup(self, chat_id: int) -> types.InlineKeyboardMarkup:
-        """Single red HTML close button (handled by the "controls close" callback)."""
         return types.InlineKeyboardMarkup([[
             _html_btn(
                 text="<b>• ᴄʟσsє •</b>",
@@ -245,14 +230,6 @@ class Utilities:
         reply_markup=None,
         **kwargs,
     ) -> types.Message | None:
-        """Send a message/photo into ``message``'s chat, replicating the
-        ``quote=True/False`` behaviour that Kurigram >= 2.2.x removed from
-        ``Message.reply_text`` / ``Message.reply_photo`` (it now raises
-        ``TypeError: unexpected keyword argument 'quote'``). Kurigram's
-        replacement is an explicit ``reply_parameters`` on the client-level
-        send methods, which this centralizes so call sites keep the same
-        ``quote=`` interface they had before.
-        """
         reply_parameters = types.ReplyParameters(message_id=message.id) if quote else None
         if photo is not None:
             return await self.send_media(
@@ -279,7 +256,6 @@ class Utilities:
         reply_markup=None,
         quote: bool | None = True,
     ) -> types.Message | None:
-        """Send text but gracefully fallback to media-only chats."""
         if not message:
             return None
         try:
@@ -313,7 +289,6 @@ class Utilities:
         *,
         reply_markup=None,
     ) -> bool:
-        """Edit text or caption safely depending on message type."""
         if not message:
             return False
         try:

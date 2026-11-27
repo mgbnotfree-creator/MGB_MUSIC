@@ -41,12 +41,12 @@ class YouTube:
         self.checked = False
         self.warned = False
 
-        self.api_url = config.ARTISTBOTS_API_URL
-        self.artistbots_key = config.ARTISTBOTS_KEY
-        self.enable_api = config.ENABLE_API
-        self.enable_cookies_fallback = config.ENABLE_COOKIES_FALLBACK
-        self.api_timeout = config.API_TIMEOUT
-        self.api_stream_timeout = config.API_STREAM_TIMEOUT
+        self.api_url = getattr(config, "MGBMUSIC_API_URL", getattr(config, "ARTISTBOTS_API_URL", None))
+        self.artistbots_key = getattr(config, "MGBMUSIC_KEY", getattr(config, "ARTISTBOTS_KEY", None))
+        self.enable_api = getattr(config, "ENABLE_API", True)
+        self.enable_cookies_fallback = getattr(config, "ENABLE_COOKIES_FALLBACK", True)
+        self.api_timeout = getattr(config, "API_TIMEOUT", 15)
+        self.api_stream_timeout = getattr(config, "API_STREAM_TIMEOUT", 60)
 
         self._inflight: dict[tuple[str, bool], asyncio.Future] = {}
         self._uploading: set[tuple[str, bool]] = set()
@@ -59,7 +59,7 @@ class YouTube:
 
         self.search_cache = {}
         self._download_semaphore = asyncio.Semaphore(5)
-        self._max_video_height = config.VIDEO_MAX_HEIGHT
+        self._max_video_height = getattr(config, "VIDEO_MAX_HEIGHT", 720)
 
         logger.info("=" * 50)
         logger.info("📹 YouTube Handler Initialized")
@@ -224,7 +224,7 @@ class YouTube:
             return None
 
         if not self.api_url:
-            logger.debug("ARTISTBOTS_API_URL not configured")
+            logger.debug("MGBMUSIC_API_URL not configured")
             return None
 
         if "v=" in link:
@@ -274,7 +274,6 @@ class YouTube:
             async with aiohttp.ClientSession() as session:
                 api_endpoint = f"{self.api_url.rstrip('/')}/download"
                 logger.debug(f"Calling API: {api_endpoint}")
-
                 async with session.get(
                     api_endpoint,
                     params=params,
@@ -353,7 +352,6 @@ class YouTube:
         except Exception as e:
             logger.error(f"❌ API download failed for {video_id}: {type(e).__name__}: {e}")
             return None
-
     async def download_via_cookies(self, video_id: str, video: bool = False) -> Optional[str]:
         if not self.enable_cookies_fallback:
             logger.debug("Cookies fallback is disabled in config")

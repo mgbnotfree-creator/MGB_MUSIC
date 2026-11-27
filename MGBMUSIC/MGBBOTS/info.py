@@ -16,7 +16,7 @@
 # ==========================================================
 #
 # Plugin   : /info /userinfo /whois
-# Location : MGBMUSIC/Artistbots/info.py
+# Location : MGBMUSIC/MGBBOTS/info.py
 #
 #   Reply to someone, pass @username / user-ID, or use it alone for yourself.
 # ==========================================================

@@ -7,7 +7,6 @@
 # All rights reserved.
 # ==========================================================
 
-import json
 import os
 import re
 import aiohttp
@@ -16,122 +15,72 @@ from pyrogram import enums, errors, filters, types
 from MGBMUSIC import app, config, db, lang
 from MGBMUSIC.helpers import buttons, utils
 
-_BTN_RE = re.compile(
-    r'<tg-button\s+([^>]+)>(.*?)</tg-button>',
-    re.IGNORECASE | re.DOTALL,
-)
-_ATTR_RE = re.compile(r'(\w+)\s*=\s*"([^"]*)"')
 
-
-def parse_html_buttons(html_text: str):
-    """<tg-button ...> टैग्स को पार्स करके (clean_text, inline_keyboard) बनाता है।"""
-    rows = []
-    clean_lines = []
-
-    for line in html_text.splitlines():
-        matches = list(_BTN_RE.finditer(line))
-        if matches:
-            row = []
-            for m in matches:
-                attrs = dict(_ATTR_RE.findall(m.group(1)))
-                label = re.sub(r"<[^>]+>", "", m.group(2)).strip()
-                btn = {"text": label}
-
-                if "url" in attrs:
-                    btn["url"] = attrs["url"]
-                elif "callback" in attrs:
-                    btn["callback_data"] = attrs["callback"]
-                elif "copy_text" in attrs:
-                    btn["copy_text"] = {"text": attrs["copy_text"]}
-
-                if "style" in attrs:
-                    btn["style"] = attrs["style"]  # primary | success | danger
-                if "emoji_id" in attrs:
-                    btn["icon_custom_emoji_id"] = attrs["emoji_id"]
-
-                row.append(btn)
-            if row:
-                rows.append(row)
-            rem = _BTN_RE.sub("", line).strip()
-            if rem:
-                clean_lines.append(rem)
-        else:
-            clean_lines.append(line)
-
-    return "\n".join(clean_lines).strip(), rows
-
-
-def markup_to_html_buttons(markup, first_style: str = "success") -> str:
-    """Pyrogram InlineKeyboardMarkup को <tg-button> HTML टैग्स में बदलता है।"""
+def _markup_to_rich_rows(markup, first_style: str = "success") -> str:
+    """Pyrogram InlineKeyboardMarkup को <tg-button-row> + <tg-button> HTML में बदलता है।"""
     if not markup:
         return ""
+    if isinstance(markup, str):
+        return markup
     rows = getattr(markup, "inline_keyboard", None)
     if not isinstance(rows, list):
         return ""
 
-    lines = []
+    html_rows = []
     for r_idx, row in enumerate(rows):
-        tags = []
+        btns = []
         for b_idx, btn in enumerate(row):
             label = re.sub(r"<[^>]+>", "", getattr(btn, "text", "")).strip()
+            cb_data = str(getattr(btn, "callback_data", "") or "")
             if r_idx == 0 and b_idx == 0:
                 style = first_style
-            elif "close" in str(getattr(btn, "callback_data", "")).lower():
+            elif "close" in cb_data.lower():
                 style = "danger"
             else:
                 style = "primary"
 
             if getattr(btn, "url", None):
-                tags.append(f'<tg-button url="{btn.url}" style="{style}">{label}</tg-button>')
-            elif getattr(btn, "callback_data", None):
-                tags.append(f'<tg-button callback="{btn.callback_data}" style="{style}">{label}</tg-button>')
-        if tags:
-            lines.append(" ".join(tags))
-    return "\n".join(lines)
+                btns.append(f'<tg-button type="url" style="{style}" url="{btn.url}">{label}</tg-button>')
+            elif cb_data:
+                btns.append(f'<tg-button type="callback" style="{style}" data="{cb_data}">{label}</tg-button>')
+        if btns:
+            html_rows.append(f'<tg-button-row align="center">{"".join(btns)}</tg-button-row>')
+    return "".join(html_rows)
 
 
 async def sendRichMessage(
     message: types.Message,
-    html_text: str,
+    text: str,
+    html_buttons: str = "",
     photo=None,
     quote: bool = True,
     fallback_markup=None,
 ):
-    """100% HTML <tg-button> सपोर्ट के साथ मैसेज या फोटो भेजता है।"""
+    """sendRichMessage API (<tg-button-row> + <tg-button>) से HTML बटन भेजता है।"""
     token = getattr(config, "BOT_TOKEN", None) or os.getenv("BOT_TOKEN")
-    clean_text, keyboard = parse_html_buttons(html_text)
+    safe_text = text.replace("\n", "<br>")
+    rich_body = f"<blockquote>{safe_text}</blockquote><br><br>{html_buttons}" if html_buttons else f"<blockquote>{safe_text}</blockquote>"
+
+    if photo:
+        first_photo = str(photo).split()[0] if isinstance(photo, str) else photo
+        rich_message = {
+            "html": f'<img src="tg://photo?id=rich_cover"/><br>{rich_body}',
+            "media": [{"id": "rich_cover", "media": {"type": "photo", "media": first_photo}}],
+        }
+    else:
+        rich_message = {"html": rich_body}
 
     if token:
+        url = f"https://api.telegram.org/bot{token}/sendRichMessage"
+        payload = {"chat_id": message.chat.id, "rich_message": rich_message}
+        if quote:
+            payload["reply_parameters"] = {
+                "message_id": message.id,
+                "allow_sending_without_reply": True,
+            }
         timeout = aiohttp.ClientTimeout(total=15)
         try:
             async with aiohttp.ClientSession(timeout=timeout) as session:
-                if photo:
-                    first_photo = str(photo).split()[0] if isinstance(photo, str) else photo
-                    url = f"https://api.telegram.org/bot{token}/sendPhoto"
-                    payload = {
-                        "chat_id": message.chat.id,
-                        "photo": first_photo,
-                        "caption": clean_text,
-                        "parse_mode": "HTML",
-                    }
-                else:
-                    url = f"https://api.telegram.org/bot{token}/sendMessage"
-                    payload = {
-                        "chat_id": message.chat.id,
-                        "text": clean_text,
-                        "parse_mode": "HTML",
-                        "link_preview_options": {"is_disabled": True},
-                    }
-
-                if keyboard:
-                    payload["reply_markup"] = {"inline_keyboard": keyboard}
-
-                if quote:
-                    payload["reply_parameters"] = {
-                        "message_id": message.id,
-                        "allow_sending_without_reply": True,
-                    }
-
                 async with session.post(url, json=payload) as resp:
                     data = await resp.json()
                     if data.get("ok"):
@@ -143,40 +92,48 @@ async def sendRichMessage(
         return await utils.reply(
             message,
             photo=photo,
-            caption=clean_text,
+            caption=text,
             reply_markup=fallback_markup,
             quote=quote,
         )
     return await utils.reply(
         message,
-        text=clean_text,
+        text=text,
         reply_markup=fallback_markup,
         quote=quote,
     )
 
 
-def _build_start_html(base_text: str, private: bool) -> str:
-    """Start मैसेज के साथ सीधे 100% HTML <tg-button> जोड़ता है।"""
+def _build_start_rich_buttons(private: bool) -> str:
+    """Start मैसेज के लिए <tg-button-row> HTML बटन बनाता है।"""
     bot_user = app.username
     owner_url = f"https://t.me/{config.OWNER_ID}" if str(getattr(config, "OWNER_ID", "")).startswith("@") else "https://t.me/MGB_NOT_FREE_1"
     channel_url = getattr(config, "SUPPORT_CHANNEL", None) or "https://t.me/MGB_SUPPROT_GROUP"
     support_url = getattr(config, "SUPPORT_CHAT", None) or "https://t.me/mgb_not_free_coder"
 
     if private:
-        html_btns = (
-            f'<tg-button url="https://t.me/{bot_user}?startgroup=true" style="success">➕ ᴀᴅᴅ ϻє ᴛσ ʏσυʀ ɢʀσυᴘ</tg-button>\n'
-            f'<tg-button url="{owner_url}" style="danger">👑 σᴡηєʀ</tg-button> '
-            f'<tg-button callback="settings_back_helper" style="primary">📚 ʜєʟᴘ</tg-button>\n'
-            f'<tg-button url="{channel_url}" style="primary">📢 ᴄʜᴧηηєʟ</tg-button> '
-            f'<tg-button url="{support_url}" style="primary">💬 sυᴘᴘσʀᴛ</tg-button>'
+        return (
+            f'<tg-button-row align="center">'
+            f'<tg-button type="url" style="success" url="https://t.me/{bot_user}?startgroup=true">➕ ᴀᴅᴅ ϻє ᴛσ ʏσυʀ ɢʀσυᴘ</tg-button>'
+            f'</tg-button-row>'
+            f'<tg-button-row align="center">'
+            f'<tg-button type="url" style="danger" url="{owner_url}">👑 σᴡηєʀ</tg-button>'
+            f'<tg-button type="callback" style="primary" data="settings_back_helper">📚 ʜєʟᴘ</tg-button>'
+            f'</tg-button-row>'
+            f'<tg-button-row align="center">'
+            f'<tg-button type="url" style="primary" url="{channel_url}">📢 ᴄʜᴧηηєʟ</tg-button>'
+            f'<tg-button type="url" style="primary" url="{support_url}">💬 sυᴘᴘσʀᴛ</tg-button>'
+            f'</tg-button-row>'
         )
-    else:
-        html_btns = (
-            f'<tg-button url="https://t.me/{bot_user}?start=help" style="success">📚 ʜєʟᴘ & ᴄσϻϻᴧηᴅs</tg-button>\n'
-            f'<tg-button url="{channel_url}" style="primary">📢 ᴄʜᴧηηєʟ</tg-button> '
-            f'<tg-button url="{support_url}" style="primary">💬 sυᴘᴘσʀᴛ</tg-button>'
-        )
-    return f"{base_text}\n\n{html_btns}"
+    return (
+        f'<tg-button-row align="center">'
+        f'<tg-button type="url" style="success" url="https://t.me/{bot_user}?start=help">📚 ʜєʟᴘ & ᴄσϻϻᴧηᴅs</tg-button>'
+        f'</tg-button-row>'
+        f'<tg-button-row align="center">'
+        f'<tg-button type="url" style="primary" url="{channel_url}">📢 ᴄʜᴧηηєʟ</tg-button>'
+        f'<tg-button type="url" style="primary" url="{support_url}">💬 sυᴘᴘσʀᴛ</tg-button>'
+        f'</tg-button-row>'
+    )
 
 
 @app.on_message(filters.command(["help"]) & filters.private & ~app.bl_users)
@@ -189,12 +146,13 @@ async def _help(_, m: types.Message):
         pass
 
     fb_markup = buttons.help_markup(m.lang)
-    html_text = f"{m.lang['help_menu']}\n\n{markup_to_html_buttons(fb_markup, first_style='primary')}"
+    html_btns = _markup_to_rich_rows(fb_markup, first_style="primary")
 
     try:
         await sendRichMessage(
             m,
-            html_text=html_text,
+            text=m.lang["help_menu"],
+            html_buttons=html_btns,
             photo=config.START_IMG,
             quote=True,
             fallback_markup=fb_markup,
@@ -202,7 +160,8 @@ async def _help(_, m: types.Message):
     except Exception:
         await sendRichMessage(
             m,
-            html_text=html_text,
+            text=m.lang["help_menu"],
+            html_buttons=html_btns,
             quote=True,
             fallback_markup=fb_markup,
         )
@@ -235,12 +194,13 @@ async def start(_, message: types.Message):
         else message.lang["start_gp"].format(app.name)
     )
     fb_key = buttons.start_key(message.lang, private)
-    html_payload = _build_start_html(_text, private)
+    html_btns = _build_start_rich_buttons(private)
 
     try:
         await sendRichMessage(
             message,
-            html_text=html_payload,
+            text=_text,
+            html_buttons=html_btns,
             photo=config.START_IMG,
             quote=not private,
             fallback_markup=fb_key,
@@ -249,7 +209,8 @@ async def start(_, message: types.Message):
         try:
             await sendRichMessage(
                 message,
-                html_text=html_payload,
+                text=_text,
+                html_buttons=html_btns,
                 quote=not private,
                 fallback_markup=fb_key,
             )
@@ -280,11 +241,12 @@ async def settings(_, message: types.Message):
     fb_markup = buttons.settings_markup(
         message.lang, admin_only, force_admin, _language, message.chat.id
     )
-    html_text = f"{message.lang['start_settings'].format(message.chat.title)}\n\n{markup_to_html_buttons(fb_markup)}"
+    html_btns = _markup_to_rich_rows(fb_markup)
 
     await sendRichMessage(
         message,
-        html_text=html_text,
+        text=message.lang["start_settings"].format(message.chat.title),
+        html_buttons=html_btns,
         quote=True,
         fallback_markup=fb_markup,
     )
@@ -302,4 +264,3 @@ async def _new_member(_, message: types.Message):
             if await db.is_chat(message.chat.id):
                 return
             await db.add_chat(message.chat.id)
-            

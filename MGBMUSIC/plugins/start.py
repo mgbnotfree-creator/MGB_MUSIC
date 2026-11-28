@@ -78,6 +78,38 @@ def get_random_start_img():
     return random.choice(img_list)
 
 
+def _markup_to_rich_html(markup) -> str:
+    """InlineKeyboardMarkup ऑब्जेक्ट को असली <tg-button-row> HTML बटन्स में बदलता है।"""
+    if isinstance(markup, str):
+        return markup
+    rows = getattr(markup, "inline_keyboard", None)
+    if not isinstance(rows, list):
+        return ""
+    html_rows = []
+    for row in rows:
+        btns = []
+        for btn in row:
+            text = getattr(btn, "text", "")
+            cb = getattr(btn, "callback_data", None)
+            url = getattr(btn, "url", None)
+            style_obj = getattr(btn, "style", None)
+            style_str = str(getattr(style_obj, "value", style_obj) or "").lower()
+            if "success" in style_str:
+                style = "success"
+            elif "danger" in style_str or "close" in str(cb or "").lower():
+                style = "danger"
+            else:
+                style = "primary"
+
+            if url:
+                btns.append(f'<tg-button type="url" style="{style}" url="{url}">{text}</tg-button>')
+            elif cb:
+                btns.append(f'<tg-button type="callback" style="{style}" data="{cb}">{text}</tg-button>')
+        if btns:
+            html_rows.append(f'<tg-button-row align="center">{"".join(btns)}</tg-button-row>')
+    return "".join(html_rows)
+
+
 async def _send_rich_start(chat_id: int, photo_url: str, text: str):
     if not config.BOT_TOKEN: return None
     safe_text = text.replace('\n', '<br>')
@@ -107,10 +139,11 @@ async def _send_rich_start(chat_id: int, photo_url: str, text: str):
     except Exception: pass
     return None
 
-async def _send_rich_help(chat_id: int, photo_url: str, text: str, html_buttons: str):
+async def _send_rich_help(chat_id: int, photo_url: str, text: str, html_buttons):
     if not config.BOT_TOKEN: return None
     safe_text = text.replace('\n', '<br>')
-    rich_body = f"<blockquote>{safe_text}</blockquote><br><br>{html_buttons}"
+    rich_btns = _markup_to_rich_html(html_buttons)
+    rich_body = f"<blockquote>{safe_text}</blockquote><br><br>{rich_btns}"
     rich_message = {
         "html": f'<img src="tg://photo?id=help_cover"/><br>{rich_body}',
         "media": [{"id": "help_cover", "media": {"type": "photo", "media": photo_url}}]
@@ -294,4 +327,3 @@ async def _new_member(_, message: types.Message):
         if member.id == app.id:
             if await db.is_chat(message.chat.id): return
             await db.add_chat(message.chat.id)
-    

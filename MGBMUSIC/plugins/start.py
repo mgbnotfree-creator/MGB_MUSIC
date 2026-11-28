@@ -22,9 +22,17 @@ from MGBMUSIC import app, config, db, lang, logger
 from MGBMUSIC.helpers import buttons, utils
 
 # ----------------------------------------------------------
-# ✨ ANIMATION & EFFECT CONFIGURATION ✨
+# ✨ ANIMATION & FULL-SCREEN MESSAGE EFFECT CONFIGURATION ✨
 # ----------------------------------------------------------
 RAIN_EMOJIS = ["❤️", "🔥", "🥰", "❤️‍🔥", "💥", "🤩", "⚡️", "💯", "✨", "🏆"]
+
+# Telegram Official Full-Screen Message Effect IDs (Heart, Fire, Party, etc.)
+SCREEN_EFFECT_IDS = [
+    "5159385139981059251",  # ❤️ Hearts Rain
+    "5104841245755180586",  # 🔥 Fire Effect
+    "5046509860389126442",  # 🎉 Party Popper
+    "5107584321108051014",  # 👍 Thumbs Up
+]
 
 _LOAD_FRAMES = [
     "⏳ <b>लोड़ हो रहा है...</b>\n<blockquote>⚡ MGB NOT FREE CODER ⚡</blockquote>\n<code>■□□□□□□□□□</code>",
@@ -69,17 +77,15 @@ def get_random_start_img():
     if not config.START_IMG:
         return "https://i.ibb.co/8nyBbj1G/uploaded-image.jpg"
     
-    # Split the long string of URLs by space into a list
     img_list = config.START_IMG.split()
     if not img_list:
-         return "https://i.ibb.co/8nyBbj1G/uploaded-image.jpg"
+        return "https://i.ibb.co/8nyBbj1G/uploaded-image.jpg"
          
-    # Pick and return one random URL
     return random.choice(img_list)
 
 
 def _markup_to_rich_html(markup) -> str:
-    """InlineKeyboardMarkup ऑब्जेक्ट को असली <tg-button-row> HTML बटन्स में बदलता है।"""
+    """Pyrogram InlineKeyboardMarkup को <tg-button-row> HTML बटन्स में बदलता है।"""
     if isinstance(markup, str):
         return markup
     rows = getattr(markup, "inline_keyboard", None)
@@ -110,8 +116,9 @@ def _markup_to_rich_html(markup) -> str:
     return "".join(html_rows)
 
 
-async def _send_rich_start(chat_id: int, photo_url: str, text: str):
-    if not config.BOT_TOKEN: return None
+async def _send_rich_start(chat_id: int, photo_url: str, text: str, with_effect: bool = True):
+    if not config.BOT_TOKEN:
+        return None
     safe_text = text.replace('\n', '<br>')
     rich_body = (
         f"<blockquote>{safe_text}</blockquote><br><br>"
@@ -119,7 +126,7 @@ async def _send_rich_start(chat_id: int, photo_url: str, text: str):
         f'<tg-button type="url" style="primary" url="https://t.me/{app.username}?startgroup=true">ㅤㅤAᴅᴅ Mᴇ Tᴏ Yᴏᴜʀ Gʀᴏᴜᴘㅤㅤ</tg-button>'
         f'</tg-button-row>'
         f'<tg-button-row align="center">'
-        f'<tg-button type="url" style="success" url="https://t.me/{app.username}?start=help">ㅤㅤHᴇʟᴘㅤㅤ</tg-button>'
+        f'<tg-button type="callback" style="success" data="help">ㅤㅤHᴇʟᴘㅤㅤ</tg-button>'
         f'</tg-button-row>'
         f'<tg-button-row align="center">'
         f'<tg-button type="url" style="primary" url="https://t.me/mgb_not_free_coder">ㅤSᴜᴘᴘᴏʀᴛㅤ</tg-button>'
@@ -130,17 +137,25 @@ async def _send_rich_start(chat_id: int, photo_url: str, text: str):
         "html": f'<img src="tg://photo?id=player_cover"/><br>{rich_body}',
         "media": [{"id": "player_cover", "media": {"type": "photo", "media": photo_url}}]
     }
+    payload = {"chat_id": chat_id, "rich_message": rich_message}
+    if with_effect:
+        payload["message_effect_id"] = random.choice(SCREEN_EFFECT_IDS)
+
     url = f"https://api.telegram.org/bot{config.BOT_TOKEN}/sendRichMessage"
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.post(url, json={"chat_id": chat_id, "rich_message": rich_message}) as resp:
+            async with session.post(url, json=payload) as resp:
                 result = await resp.json()
-                if result.get("ok"): return result["result"]
-    except Exception: pass
+                if result.get("ok"):
+                    return result["result"]
+    except Exception:
+        pass
     return None
 
+
 async def _send_rich_help(chat_id: int, photo_url: str, text: str, html_buttons):
-    if not config.BOT_TOKEN: return None
+    if not config.BOT_TOKEN:
+        return None
     safe_text = text.replace('\n', '<br>')
     rich_btns = _markup_to_rich_html(html_buttons)
     rich_body = f"<blockquote>{safe_text}</blockquote><br><br>{rich_btns}"
@@ -153,8 +168,10 @@ async def _send_rich_help(chat_id: int, photo_url: str, text: str, html_buttons)
         async with aiohttp.ClientSession() as session:
             async with session.post(url, json={"chat_id": chat_id, "rich_message": rich_message}) as resp:
                 result = await resp.json()
-                if result.get("ok"): return result["result"]
-    except Exception: pass
+                if result.get("ok"):
+                    return result["result"]
+    except Exception:
+        pass
     return None
 
 
@@ -178,25 +195,29 @@ async def rich_start_cb(_, query: types.CallbackQuery):
         pass
         
     random_pic = get_random_start_img()
-    await _send_rich_start(query.message.chat.id, random_pic, _text)
+    await _send_rich_start(
+        query.message.chat.id,
+        random_pic,
+        _text,
+        with_effect=(query.message.chat.type == enums.ChatType.PRIVATE),
+    )
         
     raise StopPropagation  
 
-@app.on_callback_query(filters.regex(r"^help$|^help_") & ~app.bl_users, group=-1)
+
+@app.on_callback_query(filters.regex(r"^help($|_)|^settings_back_helper$") & ~app.bl_users, group=-1)
 @lang.language()
 async def rich_help_categories_cb(_, query: types.CallbackQuery):
-    """यह हेल्प मेन्यू के सभी अंदरूनी बटन्स (Play, Sudo, आदि) को बिना क्रैश हुए HTML में लोड करेगा!"""
-    
+    """यह हेल्प मेन्यू और उसके सभी अंदरूनी बटन्स (Play, Sudo, आदि) को HTML में लोड करेगा!"""
     data = query.data
     category = data.replace("help_", "") if data.startswith("help_") else "main"
     
-    # Language menu को पुराना ही रहने दें
     if category == "langs":
         return
         
     await query.answer()
     
-    if category == "main" or data == "help":
+    if category == "main" or data in ("help", "settings_back_helper"):
         help_text = (
             f"<b>✨ {app.name} - HELP MENU ✨</b>\n\n"
             "• <b>/play [Song Name / URL]</b> - Play music in voice chat\n"
@@ -210,7 +231,6 @@ async def rich_help_categories_cb(_, query: types.CallbackQuery):
         html_buttons = buttons.help_markup(query.lang)
     else:
         raw_text = buttons.help_text(query.lang, category) or query.lang.get(f"help_{category}") or "Help content not found."
-        # HTML API को क्रैश होने से बचाने के लिए < और > को एस्केप किया गया है
         help_text = str(raw_text).replace("<", "&lt;").replace(">", "&gt;")
         html_buttons = buttons.help_markup(query.lang, back=True)
         
@@ -222,7 +242,7 @@ async def rich_help_categories_cb(_, query: types.CallbackQuery):
     random_pic = get_random_start_img()
     await _send_rich_help(query.message.chat.id, random_pic, help_text, html_buttons)
         
-    raise StopPropagation # यह पुराने क्रैश करने वाले कोड को चलने से पूरी तरह रोक देता है!
+    raise StopPropagation
 
 
 # ----------------------------------------------------------
@@ -232,8 +252,10 @@ async def rich_help_categories_cb(_, query: types.CallbackQuery):
 @app.on_message(filters.command(["help"]) & filters.private & ~app.bl_users)
 @lang.language()
 async def _help(_, m: types.Message):
-    try: await m.delete()
-    except Exception: pass
+    try:
+        await m.delete()
+    except Exception:
+        pass
 
     help_text = (
         f"<b>✨ {app.name} - HELP MENU ✨</b>\n\n"
@@ -250,19 +272,26 @@ async def _help(_, m: types.Message):
     try:
         random_pic = get_random_start_img()
         sent_data = await _send_rich_help(m.chat.id, random_pic, help_text, html_buttons)
-    except Exception: pass
+    except Exception:
+        pass
     if sent_data and "message_id" in sent_data:
-        try: await app.send_reaction(m.chat.id, sent_data["message_id"], "👏")
-        except Exception: pass
+        try:
+            await app.send_reaction(m.chat.id, sent_data["message_id"], "👏")
+        except Exception:
+            pass
+
 
 @app.on_message(filters.command(["start"]))
 @lang.language()
 async def start(_, message: types.Message):
     if message.chat.type != enums.ChatType.PRIVATE:
-        try: await message.delete()
-        except Exception: pass
+        try:
+            await message.delete()
+        except Exception:
+            pass
 
-    if not message.from_user: return
+    if not message.from_user:
+        return
     if message.from_user.id in app.bl_users and message.from_user.id not in db.notified:
         return await message.reply_text(message.lang["bl_user_notify"])
     if len(message.command) > 1 and message.command[1] == "help":
@@ -281,31 +310,38 @@ async def start(_, message: types.Message):
     sent_data = None
     try:
         random_pic = get_random_start_img()
-        sent_data = await _send_rich_start(message.chat.id, random_pic, _text)
+        sent_data = await _send_rich_start(message.chat.id, random_pic, _text, with_effect=private)
     except Exception:
         try:
             key = buttons.start_key(message.lang, private)
             sent_msg = await message.reply_text(text=_text, reply_markup=key)
-            if sent_msg: sent_data = {"message_id": sent_msg.id}
-        except Exception: pass
+            if sent_msg:
+                sent_data = {"message_id": sent_msg.id}
+        except Exception:
+            pass
 
     if private and sent_data and "message_id" in sent_data:
         try:
             selected_emoji = random.choice(["❤️‍🔥", "⚡", "🔥", "🥰", "🎉", "💖", "🍓"])
             await asyncio.sleep(0.5)
             await app.send_reaction(message.chat.id, sent_data["message_id"], selected_emoji)
-        except Exception: pass
+        except Exception:
+            pass
 
     if private:
-        if await db.is_user(message.from_user.id): return
+        if await db.is_user(message.from_user.id):
+            return
         await utils.send_log(message)
         return await db.add_user(message.from_user.id)
+
 
 @app.on_message(filters.command(["playmode", "settings"]) & filters.group & ~app.bl_users)
 @lang.language()
 async def settings(_, message: types.Message):
-    try: await message.delete()
-    except Exception: pass
+    try:
+        await message.delete()
+    except Exception:
+        pass
     admin_only = await db.get_play_mode(message.chat.id)
     force_admin = await db.get_force_mode(message.chat.id)
     sent = await utils.safe_text(
@@ -315,8 +351,11 @@ async def settings(_, message: types.Message):
         quote=True,
     )
     if sent:
-        try: await app.send_reaction(message.chat.id, sent.id, "❤️")
-        except Exception: pass
+        try:
+            await app.send_reaction(message.chat.id, sent.id, "❤️")
+        except Exception:
+            pass
+
 
 @app.on_message(filters.new_chat_members, group=7)
 @lang.language()
@@ -325,5 +364,6 @@ async def _new_member(_, message: types.Message):
         return await message.chat.leave()
     for member in message.new_chat_members:
         if member.id == app.id:
-            if await db.is_chat(message.chat.id): return
+            if await db.is_chat(message.chat.id):
+                return
             await db.add_chat(message.chat.id)

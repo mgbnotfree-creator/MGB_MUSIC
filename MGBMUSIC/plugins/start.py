@@ -188,14 +188,15 @@ async def _send_rich_start(chat_id: int, photo_url: str, text: str):
     rich_body = (
         f"<blockquote>{safe_text}</blockquote><br><br>"
         f'<tg-button-row align="center">'
-        f'<tg-button type="url" style="success" url="https://t.me/{app.username}?startgroup=true">ㅤㅤAᴅᴅ Mᴇ Tᴏ Yᴏᴜʀ Gʀᴏᴜᴘㅤㅤ</tg-button>'
+        f'<tg-button type="url" style="primary" url="https://t.me/{app.username}?startgroup=true">➕ Aᴅᴅ Mᴇ Tᴏ Yᴏᴜʀ Gʀᴏᴜᴘ</tg-button>'
         f"</tg-button-row>"
         f'<tg-button-row align="center">'
-        f'<tg-button type="callback" style="primary" data="help">ㅤㅤHᴇʟᴘㅤㅤ</tg-button>'
+        f'<tg-button type="url" style="primary" url="{owner_url}">👑 Oᴡɴᴇʀ</tg-button>'
+        f'<tg-button type="callback" style="success" data="help">📖 Hᴇʟᴘ</tg-button>'
         f"</tg-button-row>"
         f'<tg-button-row align="center">'
-        f'<tg-button type="url" style="primary" url="{support_url}">ㅤSᴜᴘᴘᴏʀᴛㅤ</tg-button>'
-        f'<tg-button type="url" style="danger" url="{channel_url}">ㅤCʜᴀɴɴᴇʟㅤ</tg-button>'
+        f'<tg-button type="url" style="primary" url="{support_url}">💬 Sᴜᴘᴘᴏʀᴛ</tg-button>'
+        f'<tg-button type="url" style="danger" url="{channel_url}">🚀 Cʜᴀɴɴᴇʟ</tg-button>'
         f"</tg-button-row>"
     )
     rich_message = {
@@ -216,23 +217,23 @@ async def _send_rich_start(chat_id: int, photo_url: str, text: str):
     except Exception:
         pass
 
-    # 2) Guaranteed fallback: sendPhoto with Colored Buttons (Green / Blue / Red)
+    # 2) Fallback: sendPhoto with exact same stylish font & colours
     kb = {
         "inline_keyboard": [
             [
                 {
-                    "text": "Add me to your group",
+                    "text": "🎧 Aᴅᴅ Mᴇ Tᴏ Yᴏᴜʀ Gʀᴏᴜᴘ",
                     "url": f"https://t.me/{app.username}?startgroup=true",
-                    "style": "success",
+                    "style": "primary",
                 }
             ],
             [
-                {"text": "OWNER", "url": owner_url, "style": "primary"},
-                {"text": "Help", "callback_data": "help", "style": "primary"},
+                {"text": "🤵🏻 Oᴡɴᴇʀ", "url": owner_url, "style": "primary"},
+                {"text": "🆘 Hᴇʟᴘ", "callback_data": "help", "style": "success"},
             ],
             [
-                {"text": "Channel", "url": channel_url, "style": "primary"},
-                {"text": "Support", "url": support_url, "style": "danger"},
+                {"text": "👩🏻‍💻 Sᴜᴘᴘᴏʀᴛ", "url": support_url, "style": "primary"},
+                {"text": "🦋 Cʜᴀɴɴᴇʟ", "url": channel_url, "style": "danger"},
             ],
         ]
     }
@@ -243,7 +244,7 @@ async def _send_rich_start(chat_id: int, photo_url: str, text: str):
                 json={
                     "chat_id": chat_id,
                     "photo": photo_url,
-                    "caption": text,
+                    "caption": f"<blockquote>{text}</blockquote>",
                     "parse_mode": "HTML",
                     "reply_markup": kb,
                 },
@@ -514,4 +515,4 @@ async def _new_member(_, message: types.Message):
             if await db.is_chat(message.chat.id):
                 return
             await db.add_chat(message.chat.id)
-        
+    

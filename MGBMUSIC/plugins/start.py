@@ -1,37 +1,31 @@
 # ==========================================================
-# Copyright (c) 2026 MGB NOT FREE CODER
-# All Rights Reserved.
-#
-# Project      : MGB API Telegram Music Bot
-# Powered By   : ❖ MGB NOT FREE ❖
-# Type         : API Based Telegram Music Bot
-#
-# Bot          : @Yasmeen_api_bot
-# Channel      : https://t.me/MGB_SUPPROT_GROUP
-# Group        : https://t.me/mgb_not_free_coder
-# GitHub       : https://github.com/mgbnotfree-creator/MGBMusic
+# Copyright (C) 2026 MGB NOT FREE CODER (@MGB_NOT_FREE)
+# Project : MGBMUSIC
+# Group   : https://t.me/mgb_not_free_coder
+# Channel : https://t.me/MGB_SUPPROT_GROUP
+# GitHub  : https://github.com/mgbnotfree-creator/MGBMusic
+# All rights reserved.
 # ==========================================================
 
 import asyncio
+import os
 import random
-import re
-import aiohttp
-from pyrogram import enums, errors, filters, types
-from pyrogram import StopPropagation
+from typing import Any, Dict, List, Optional
 
-from MGBMUSIC import app, config, db, lang, logger
-from MGBMUSIC.helpers import buttons, utils
+import aiohttp
+from pyrogram import StopPropagation, enums, filters, types
+
+try:
+    from MGBMUSIC import app, config, db, lang
+    from MGBMUSIC.helpers import buttons, utils
+except ImportError:
+    from ArtistMusic import app, config, db, lang
+    from ArtistMusic.helpers import buttons, utils
 
 # ----------------------------------------------------------
-# ✨ ANIMATION & MIDDLE FULL-SCREEN EFFECT CONFIGURATION ✨
+# ✨ ANIMATION & EFFECT CONFIGURATION ✨
 # ----------------------------------------------------------
 RAIN_EMOJIS = ["❤️", "🔥", "🥰", "❤️‍🔥", "💥", "🤩", "⚡️", "💯", "✨", "🏆"]
-
-MIDDLE_EFFECT_IDS = [
-    "5159385139981059251",  # ❤️ Hearts Rain (Middle Screen)
-    "5104841245755180586",  # 🔥 Fire Explosion (Middle Screen)
-    "5046509860389126442",  # 🎉 Party Popper (Middle Screen)
-]
 
 _LOAD_FRAMES = [
     "⏳ <b>लोड़ हो रहा है...</b>\n<blockquote>⚡ MGB NOT FREE CODER ⚡</blockquote>\n<code>■□□□□□□□□□</code>",
@@ -41,46 +35,35 @@ _LOAD_FRAMES = [
 ]
 
 
-async def _middle_screen_effect(chat_id: int):
-    """स्क्रीन के बिल्कुल बीच (Middle) में दिलों/आग का फुल-स्क्रीन एनिमेटेड इमोजी चलाता है।"""
-    if not config.BOT_TOKEN:
-        return
-    url = f"https://api.telegram.org/bot{config.BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": chat_id,
-        "text": "✨",
-        "message_effect_id": random.choice(MIDDLE_EFFECT_IDS),
-    }
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload) as resp:
-                data = await resp.json()
-                if data.get("ok"):
-                    msg_id = data["result"]["message_id"]
-                    await asyncio.sleep(2.2)
-                    try:
-                        await app.delete_messages(chat_id, msg_id)
-                    except Exception:
-                        pass
-    except Exception:
-        pass
-
-
 async def _emoji_rain(message: types.Message):
     emoji = random.choice(RAIN_EMOJIS)
     try:
-        await app.send_reaction(chat_id=message.chat.id, message_id=message.id, emoji=emoji, big=True)
+        await app.send_reaction(
+            chat_id=message.chat.id,
+            message_id=message.id,
+            emoji=emoji,
+            big=True,
+        )
+    except Exception:
+        pass
+    await asyncio.sleep(1.0)
+    try:
+        await app.send_reaction(
+            chat_id=message.chat.id,
+            message_id=message.id,
+            emoji=None,
+        )
     except Exception:
         pass
 
 
 async def _loading_animation(message: types.Message):
     try:
-        msg = await message.reply_text(_LOAD_FRAMES[0])
+        msg = await message.reply_text(_LOAD_FRAMES[0], parse_mode=enums.ParseMode.HTML)
         for frame in _LOAD_FRAMES[1:]:
             await asyncio.sleep(0.3)
             try:
-                await msg.edit_text(frame)
+                await msg.edit_text(frame, parse_mode=enums.ParseMode.HTML)
             except Exception:
                 break
         await asyncio.sleep(0.3)
@@ -89,127 +72,180 @@ async def _loading_animation(message: types.Message):
         pass
 
 
-# ----------------------------------------------------------
-# 🎨 HTML BUTTONS + PHOTO SENDER (NO CUT IMAGE, WORKING HELP) 🎨
-# ----------------------------------------------------------
-
-def get_random_start_img():
-    """Pick ONE random image URL from config.START_IMG."""
-    if not config.START_IMG:
+def get_random_start_img() -> str:
+    raw = getattr(config, "START_IMG", None)
+    if not raw:
         return "https://i.ibb.co/8nyBbj1G/uploaded-image.jpg"
-    img_list = str(config.START_IMG).split()
-    return random.choice(img_list) if img_list else "https://i.ibb.co/8nyBbj1G/uploaded-image.jpg"
+    imgs = str(raw).split()
+    return random.choice(imgs) if imgs else "https://i.ibb.co/8nyBbj1G/uploaded-image.jpg"
 
 
-_BTN_RE = re.compile(r'<tg-button\s+([^>]+)>(.*?)</tg-button>', re.IGNORECASE | re.DOTALL)
-_ATTR_RE = re.compile(r'(\w+)\s*=\s*"([^"]*)"')
+# ----------------------------------------------------------
+# 🎨 100% WORKING HTML COLORED BUTTON ENGINE 🎨
+# ----------------------------------------------------------
+def _hbtn(
+    text: str,
+    url: Optional[str] = None,
+    callback_data: Optional[str] = None,
+    style: str = "primary",
+) -> Dict[str, Any]:
+    btn: Dict[str, Any] = {"text": text, "style": style}
+    if url:
+        btn["url"] = url
+    if callback_data:
+        btn["callback_data"] = callback_data
+    return btn
 
 
-def _parse_tg_buttons(html_rows: str):
-    """<tg-button> टैग्स को असली रंगीन inline_keyboard में बदलता है।"""
-    kb = []
-    for line in html_rows.strip().splitlines():
-        matches = list(_BTN_RE.finditer(line))
-        if not matches:
-            continue
-        row = []
-        for m in matches:
-            attrs = dict(_ATTR_RE.findall(m.group(1)))
-            label = re.sub(r"<[^>]+>", "", m.group(2)).strip()
-            btn = {"text": label}
-            if "url" in attrs:
-                btn["url"] = attrs["url"]
-            elif "data" in attrs:
-                btn["callback_data"] = attrs["data"]
-            if "style" in attrs:
-                btn["style"] = attrs["style"]
-            row.append(btn)
-        if row:
-            kb.append(row)
-    return {"inline_keyboard": kb} if kb else None
+def _start_html_rows() -> List[List[Dict[str, Any]]]:
+    bot_uname = getattr(app, "username", None) or "Yasmeen_api_bot"
+    owner_url = f"tg://openmessage?user_id={getattr(config, 'OWNER_ID', '')}" if getattr(config, "OWNER_ID", None) else "https://t.me/MGB_NOT_FREE_1"
+    channel_url = getattr(config, "SUPPORT_CHANNEL", None) or "https://t.me/MGB_SUPPROT_GROUP"
+    support_url = getattr(config, "SUPPORT_CHAT", None) or "https://t.me/mgb_not_free_coder"
+
+    return [
+        [
+            _hbtn(
+                "➕ Aᴅᴅ Mᴇ Tᴏ Yᴏᴜʀ Gʀᴏᴜᴘ",
+                url=f"https://t.me/{bot_uname}?startgroup=true",
+                style="primary",
+            )
+        ],
+        [
+            _hbtn("👑 Oᴡɴᴇʀ", url=owner_url, style="primary"),
+            _hbtn("📖 Hᴇʟᴘ", callback_data="help", style="success"),
+        ],
+        [
+            _hbtn("💬 Sᴜᴘᴘᴏʀᴛ", url=support_url, style="primary"),
+            _hbtn("🚀 Cʜᴀɴɴᴇʟ", url=channel_url, style="danger"),
+        ],
+    ]
 
 
-def _markup_to_tg_html(markup) -> str:
-    """Pyrogram InlineKeyboardMarkup को <tg-button> HTML टैग्स में बदलता है।"""
-    if isinstance(markup, str):
-        return markup
+def _markup_to_html_rows(markup: Any) -> List[List[Dict[str, Any]]]:
+    """Convert any InlineKeyboardMarkup or dict into colored HTML button rows."""
+    if markup is None:
+        return []
+    if isinstance(markup, dict):
+        rows = markup.get("inline_keyboard", [])
+        return rows if isinstance(rows, list) else []
+
     rows = getattr(markup, "inline_keyboard", None)
     if not isinstance(rows, list):
-        return ""
-    lines = []
+        return []
+
+    out: List[List[Dict[str, Any]]] = []
     for row in rows:
-        tags = []
+        h_row: List[Dict[str, Any]] = []
         for btn in row:
-            text = getattr(btn, "text", "")
-            cb = getattr(btn, "callback_data", None)
-            url = getattr(btn, "url", None)
-            if "close" in str(cb or "").lower() or "back" in str(cb or "").lower():
-                style = "danger"
+            item: Dict[str, Any] = {"text": getattr(btn, "text", "")}
+            if getattr(btn, "url", None):
+                item["url"] = btn.url
+            if getattr(btn, "callback_data", None):
+                item["callback_data"] = btn.callback_data
+            if getattr(btn, "copy_text", None):
+                item["copy_text"] = btn.copy_text
+
+            st = getattr(btn, "style", None)
+            if st:
+                st_str = str(getattr(st, "value", None) or getattr(st, "name", None) or st).lower()
+                if "danger" in st_str:
+                    item["style"] = "danger"
+                elif "success" in st_str:
+                    item["style"] = "success"
+                else:
+                    item["style"] = "primary"
             else:
-                style = "primary"
-            if url:
-                tags.append(f'<tg-button type="url" style="{style}" url="{url}">{text}</tg-button>')
-            elif cb:
-                tags.append(f'<tg-button type="callback" style="{style}" data="{cb}">{text}</tg-button>')
-        if tags:
-            lines.append(" ".join(tags))
-    return "\n".join(lines)
+                cb = str(item.get("callback_data", "")).lower()
+                if "close" in cb:
+                    item["style"] = "danger"
+                elif "back" in cb or cb in ("start", "help_main"):
+                    item["style"] = "success"
+                else:
+                    item["style"] = "primary"
+
+            h_row.append(item)
+        out.append(h_row)
+    return out
 
 
-async def _send_html_photo_card(chat_id: int, photo_url: str, text: str, html_buttons: str):
-    """फुल इमेज + HTML रंगीन बटन्स के साथ कार्ड भेजता है।"""
-    if not config.BOT_TOKEN:
+async def _send_html_photo(
+    chat_id: int,
+    photo_url: str,
+    caption: str,
+    rows: List[List[Dict[str, Any]]],
+    reply_to_id: Optional[int] = None,
+) -> Optional[Dict[str, Any]]:
+    token = getattr(config, "BOT_TOKEN", None) or os.getenv("BOT_TOKEN")
+    if not token:
         return None
-    kb = _parse_tg_buttons(html_buttons)
-    url = f"https://api.telegram.org/bot{config.BOT_TOKEN}/sendPhoto"
-    payload = {
+
+    timeout = aiohttp.ClientTimeout(total=15)
+    payload: Dict[str, Any] = {
         "chat_id": chat_id,
         "photo": photo_url,
-        "caption": text,
+        "caption": caption,
         "parse_mode": "HTML",
+        "reply_markup": {"inline_keyboard": rows},
     }
-    if kb:
-        payload["reply_markup"] = kb
+    if reply_to_id:
+        payload["reply_parameters"] = {
+            "message_id": reply_to_id,
+            "allow_sending_without_reply": True,
+        }
 
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload) as resp:
-                result = await resp.json()
-                if result.get("ok"):
-                    return result["result"]
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(
+                f"https://api.telegram.org/bot{token}/sendPhoto",
+                json=payload,
+            ) as resp:
+                data = await resp.json()
+                if data.get("ok") and isinstance(data.get("result"), dict):
+                    return data["result"]
     except Exception:
         pass
+
+    # Text fallback with same colored HTML buttons if photo fails
+    text_payload: Dict[str, Any] = {
+        "chat_id": chat_id,
+        "text": caption,
+        "parse_mode": "HTML",
+        "link_preview_options": {"is_disabled": True},
+        "reply_markup": {"inline_keyboard": rows},
+    }
+    if reply_to_id:
+        text_payload["reply_parameters"] = {
+            "message_id": reply_to_id,
+            "allow_sending_without_reply": True,
+        }
+
+    try:
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(
+                f"https://api.telegram.org/bot{token}/sendMessage",
+                json=text_payload,
+            ) as resp:
+                data = await resp.json()
+                if data.get("ok") and isinstance(data.get("result"), dict):
+                    return data["result"]
+    except Exception:
+        pass
+
     return None
 
 
-async def _send_rich_start(chat_id: int, photo_url: str, text: str):
-    html_btns = (
-        f'<tg-button type="url" style="success" url="https://t.me/{app.username}?startgroup=true">➕ Aᴅᴅ Mᴇ Tᴏ Yᴏᴜʀ Gʀᴏᴜᴘ</tg-button>\n'
-        f'<tg-button type="callback" style="primary" data="mgb_help">📚 Hᴇʟᴘ</tg-button> '
-        f'<tg-button type="url" style="danger" url="https://t.me/MGB_NOT_FREE_1">👑 Oᴡɴᴇʀ</tg-button>\n'
-        f'<tg-button type="url" style="primary" url="https://t.me/mgb_not_free_coder">💬 Sᴜᴘᴘᴏʀᴛ</tg-button> '
-        f'<tg-button type="url" style="primary" url="https://t.me/MGB_SUPPROT_GROUP">📢 Cʜᴀɴɴᴇʟ</tg-button>'
-    )
-    return await _send_html_photo_card(chat_id, photo_url, text, html_btns)
-
-
-async def _send_rich_help(chat_id: int, photo_url: str, text: str, html_buttons):
-    tg_html = _markup_to_tg_html(html_buttons)
-    return await _send_html_photo_card(chat_id, photo_url, text, tg_html)
-
-
 # ----------------------------------------------------------
-# 🚀 SUPER OVERRIDES (FIXES HELP MENU & CLOSE BUTTONS) 🚀
+# 🚀 WORKING HELP & START CALLBACK HANDLERS 🚀
 # ----------------------------------------------------------
-
-@app.on_callback_query(filters.regex(r"^start$") & ~app.bl_users, group=-2)
+@app.on_callback_query(filters.regex(r"^start$") & ~app.bl_users, group=-1)
 @lang.language()
 async def rich_start_cb(_, query: types.CallbackQuery):
-    """जब आप '❌ CLOSE' दबाएंगे, तो यह नया कलरफुल स्टार्ट मेन्यू लाएगा!"""
     await query.answer()
+    private = query.message.chat.type == enums.ChatType.PRIVATE
     _text = (
         query.lang["start_pm"].format(query.from_user.first_name, app.name)
-        if query.message.chat.type == enums.ChatType.PRIVATE
+        if private
         else query.lang["start_gp"].format(app.name)
     )
     try:
@@ -217,15 +253,18 @@ async def rich_start_cb(_, query: types.CallbackQuery):
     except Exception:
         pass
 
-    random_pic = get_random_start_img()
-    await _send_rich_start(query.message.chat.id, random_pic, _text)
+    await _send_html_photo(
+        query.message.chat.id,
+        get_random_start_img(),
+        f"<blockquote>{_text}</blockquote>",
+        _start_html_rows(),
+    )
     raise StopPropagation
 
 
-@app.on_callback_query(filters.regex(r"^(mgb_help|help($|_)|settings_back_helper$)") & ~app.bl_users, group=-2)
+@app.on_callback_query(filters.regex(r"^help$|^help_") & ~app.bl_users, group=-1)
 @lang.language()
 async def rich_help_categories_cb(_, query: types.CallbackQuery):
-    """यह हेल्प मेन्यू और उसके सभी अंदरूनी बटन्स को HTML में लोड करेगा!"""
     data = query.data
     category = data.replace("help_", "") if data.startswith("help_") else "main"
 
@@ -234,8 +273,8 @@ async def rich_help_categories_cb(_, query: types.CallbackQuery):
 
     await query.answer()
 
-    if category == "main" or data in ("mgb_help", "help", "settings_back_helper"):
-        help_text = (
+    if category in ("main", "man") or data == "help":
+        help_text = query.lang.get("help_menu") or (
             f"<b>✨ {app.name} - HELP MENU ✨</b>\n\n"
             "• <b>/play [Song Name / URL]</b> - Play music in voice chat\n"
             "• <b>/vplay [Video Name / URL]</b> - Play video in voice chat\n"
@@ -243,28 +282,35 @@ async def rich_help_categories_cb(_, query: types.CallbackQuery):
             "• <b>/pause</b> - Pause the music stream\n"
             "• <b>/resume</b> - Resume the music stream\n"
             "• <b>/stop</b> - Stop music and clear queue\n"
-            "• <b>/settings</b> - Configure bot settings (Admin only)"
+            "• <b>/settings</b> - Configure bot settings"
         )
-        html_buttons = buttons.help_markup(query.lang)
+        rows = _markup_to_html_rows(buttons.help_markup(query.lang))
     else:
-        raw_text = buttons.help_text(query.lang, category) or query.lang.get(f"help_{category}") or "Help content not found."
-        help_text = str(raw_text).replace("<", "&lt;").replace(">", "&gt;")
-        html_buttons = buttons.help_markup(query.lang, back=True)
+        raw_text = (
+            buttons.help_text(query.lang, category)
+            or query.lang.get(f"help_{category}")
+            or "Help content not found."
+        )
+        help_text = str(raw_text)
+        rows = _markup_to_html_rows(buttons.help_markup(query.lang, back=True))
 
     try:
         await query.message.delete()
     except Exception:
         pass
 
-    random_pic = get_random_start_img()
-    await _send_rich_help(query.message.chat.id, random_pic, help_text, html_buttons)
+    await _send_html_photo(
+        query.message.chat.id,
+        get_random_start_img(),
+        help_text,
+        rows,
+    )
     raise StopPropagation
 
 
 # ----------------------------------------------------------
 # 🤖 BOT COMMANDS (START, HELP, SETTINGS) 🤖
 # ----------------------------------------------------------
-
 @app.on_message(filters.command(["help"]) & filters.private & ~app.bl_users)
 @lang.language()
 async def _help(_, m: types.Message):
@@ -273,7 +319,7 @@ async def _help(_, m: types.Message):
     except Exception:
         pass
 
-    help_text = (
+    help_text = m.lang.get("help_menu") or (
         f"<b>✨ {app.name} - HELP MENU ✨</b>\n\n"
         "• <b>/play [Song Name / URL]</b> - Play music in voice chat\n"
         "• <b>/vplay [Video Name / URL]</b> - Play video in voice chat\n"
@@ -281,15 +327,15 @@ async def _help(_, m: types.Message):
         "• <b>/pause</b> - Pause the music stream\n"
         "• <b>/resume</b> - Resume the music stream\n"
         "• <b>/stop</b> - Stop music and clear queue\n"
-        "• <b>/settings</b> - Configure bot settings (Admin only)"
+        "• <b>/settings</b> - Configure bot settings"
     )
-    html_buttons = buttons.help_markup(m.lang)
-    sent_data = None
-    try:
-        random_pic = get_random_start_img()
-        sent_data = await _send_rich_help(m.chat.id, random_pic, help_text, html_buttons)
-    except Exception:
-        pass
+    rows = _markup_to_html_rows(buttons.help_markup(m.lang))
+    sent_data = await _send_html_photo(
+        m.chat.id,
+        get_random_start_img(),
+        help_text,
+        rows,
+    )
     if sent_data and "message_id" in sent_data:
         try:
             await app.send_reaction(m.chat.id, sent_data["message_id"], "👏")
@@ -315,30 +361,22 @@ async def start(_, message: types.Message):
 
     private = message.chat.type == enums.ChatType.PRIVATE
     if private:
-        asyncio.create_task(_middle_screen_effect(message.chat.id))
         await _emoji_rain(message)
         await _loading_animation(message)
 
     _text = (
         message.lang["start_pm"].format(message.from_user.first_name, app.name)
-        if private else message.lang["start_gp"].format(app.name)
+        if private
+        else message.lang["start_gp"].format(app.name)
     )
 
-    random_pic = get_random_start_img()
-    sent_data = None
-    try:
-        sent_data = await _send_rich_start(message.chat.id, random_pic, _text)
-    except Exception:
-        pass
-
-    if not sent_data:
-        try:
-            key = buttons.start_key(message.lang, private)
-            sent_msg = await message.reply_photo(photo=random_pic, caption=_text, reply_markup=key)
-            if sent_msg:
-                sent_data = {"message_id": sent_msg.id}
-        except Exception:
-            pass
+    sent_data = await _send_html_photo(
+        message.chat.id,
+        get_random_start_img(),
+        f"<blockquote>{_text}</blockquote>",
+        _start_html_rows(),
+        reply_to_id=None if private else message.id,
+    )
 
     if private and sent_data and "message_id" in sent_data:
         try:
@@ -362,17 +400,36 @@ async def settings(_, message: types.Message):
         await message.delete()
     except Exception:
         pass
+
     admin_only = await db.get_play_mode(message.chat.id)
     force_admin = await db.get_force_mode(message.chat.id)
-    sent = await utils.safe_text(
-        message,
-        message.lang["start_settings"].format(message.chat.title),
-        reply_markup=buttons.settings_markup(message.lang, admin_only, force_admin, "en", message.chat.id),
-        quote=True,
+    rows = _markup_to_html_rows(
+        buttons.settings_markup(message.lang, admin_only, force_admin, "en", message.chat.id)
     )
-    if sent:
+
+    token = getattr(config, "BOT_TOKEN", None) or os.getenv("BOT_TOKEN")
+    sent_id = None
+    if token and rows:
         try:
-            await app.send_reaction(message.chat.id, sent.id, "❤️")
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15)) as session:
+                async with session.post(
+                    f"https://api.telegram.org/bot{token}/sendMessage",
+                    json={
+                        "chat_id": message.chat.id,
+                        "text": message.lang["start_settings"].format(message.chat.title),
+                        "parse_mode": "HTML",
+                        "reply_markup": {"inline_keyboard": rows},
+                    },
+                ) as resp:
+                    data = await resp.json()
+                    if data.get("ok") and isinstance(data.get("result"), dict):
+                        sent_id = data["result"]["message_id"]
+        except Exception:
+            pass
+
+    if sent_id:
+        try:
+            await app.send_reaction(message.chat.id, sent_id, "❤️")
         except Exception:
             pass
 

@@ -22,16 +22,15 @@ from MGBMUSIC import app, config, db, lang, logger
 from MGBMUSIC.helpers import buttons, utils
 
 # ----------------------------------------------------------
-# ✨ ANIMATION & FULL-SCREEN MESSAGE EFFECT CONFIGURATION ✨
+# ✨ ANIMATION & MIDDLE FULL-SCREEN EFFECT CONFIGURATION ✨
 # ----------------------------------------------------------
 RAIN_EMOJIS = ["❤️", "🔥", "🥰", "❤️‍🔥", "💥", "🤩", "⚡️", "💯", "✨", "🏆"]
 
-# Telegram Official Full-Screen Message Effect IDs (Heart, Fire, Party, etc.)
-SCREEN_EFFECT_IDS = [
-    "5159385139981059251",  # ❤️ Hearts Rain
-    "5104841245755180586",  # 🔥 Fire Effect
-    "5046509860389126442",  # 🎉 Party Popper
-    "5107584321108051014",  # 👍 Thumbs Up
+# Telegram Official Middle Full-Screen Animated Effect IDs
+MIDDLE_EFFECT_IDS = [
+    "5159385139981059251",  # ❤️ Hearts Rain (Middle Screen)
+    "5104841245755180586",  # 🔥 Fire Explosion (Middle Screen)
+    "5046509860389126442",  # 🎉 Party Popper (Middle Screen)
 ]
 
 _LOAD_FRAMES = [
@@ -41,17 +40,39 @@ _LOAD_FRAMES = [
     "✨ <b>बॉट तैयार है!</b>\n<blockquote>⚡ MGB NOT FREE CODER ⚡</blockquote>\n<code>■■■■■■■■■■</code>",
 ]
 
+
+async def _middle_screen_effect(chat_id: int):
+    """स्क्रीन के बिल्कुल बीच (Middle) में दिलों/आग का फुल-स्क्रीन एनिमेटेड इमोजी चलाता है।"""
+    if not config.BOT_TOKEN:
+        return
+    url = f"https://api.telegram.org/bot{config.BOT_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": "✨",
+        "message_effect_id": random.choice(MIDDLE_EFFECT_IDS),
+    }
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload) as resp:
+                data = await resp.json()
+                if data.get("ok"):
+                    msg_id = data["result"]["message_id"]
+                    await asyncio.sleep(2.2)
+                    try:
+                        await app.delete_messages(chat_id, msg_id)
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+
+
 async def _emoji_rain(message: types.Message):
     emoji = random.choice(RAIN_EMOJIS)
     try:
         await app.send_reaction(chat_id=message.chat.id, message_id=message.id, emoji=emoji, big=True)
     except Exception:
         pass
-    await asyncio.sleep(1.0)
-    try:
-        await app.send_reaction(chat_id=message.chat.id, message_id=message.id, emoji=None)
-    except Exception:
-        pass
+
 
 async def _loading_animation(message: types.Message):
     try:
@@ -116,7 +137,7 @@ def _markup_to_rich_html(markup) -> str:
     return "".join(html_rows)
 
 
-async def _send_rich_start(chat_id: int, photo_url: str, text: str, with_effect: bool = True):
+async def _send_rich_start(chat_id: int, photo_url: str, text: str):
     if not config.BOT_TOKEN:
         return None
     safe_text = text.replace('\n', '<br>')
@@ -137,14 +158,10 @@ async def _send_rich_start(chat_id: int, photo_url: str, text: str, with_effect:
         "html": f'<img src="tg://photo?id=player_cover"/><br>{rich_body}',
         "media": [{"id": "player_cover", "media": {"type": "photo", "media": photo_url}}]
     }
-    payload = {"chat_id": chat_id, "rich_message": rich_message}
-    if with_effect:
-        payload["message_effect_id"] = random.choice(SCREEN_EFFECT_IDS)
-
     url = f"https://api.telegram.org/bot{config.BOT_TOKEN}/sendRichMessage"
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload) as resp:
+            async with session.post(url, json={"chat_id": chat_id, "rich_message": rich_message}) as resp:
                 result = await resp.json()
                 if result.get("ok"):
                     return result["result"]
@@ -195,12 +212,7 @@ async def rich_start_cb(_, query: types.CallbackQuery):
         pass
         
     random_pic = get_random_start_img()
-    await _send_rich_start(
-        query.message.chat.id,
-        random_pic,
-        _text,
-        with_effect=(query.message.chat.type == enums.ChatType.PRIVATE),
-    )
+    await _send_rich_start(query.message.chat.id, random_pic, _text)
         
     raise StopPropagation  
 
@@ -299,6 +311,7 @@ async def start(_, message: types.Message):
 
     private = message.chat.type == enums.ChatType.PRIVATE
     if private:
+        asyncio.create_task(_middle_screen_effect(message.chat.id))
         await _emoji_rain(message)
         await _loading_animation(message)
 
@@ -310,8 +323,11 @@ async def start(_, message: types.Message):
     sent_data = None
     try:
         random_pic = get_random_start_img()
-        sent_data = await _send_rich_start(message.chat.id, random_pic, _text, with_effect=private)
+        sent_data = await _send_rich_start(message.chat.id, random_pic, _text)
     except Exception:
+        pass
+
+    if not sent_data:
         try:
             key = buttons.start_key(message.lang, private)
             sent_msg = await message.reply_text(text=_text, reply_markup=key)
@@ -367,3 +383,4 @@ async def _new_member(_, message: types.Message):
             if await db.is_chat(message.chat.id):
                 return
             await db.add_chat(message.chat.id)
+                

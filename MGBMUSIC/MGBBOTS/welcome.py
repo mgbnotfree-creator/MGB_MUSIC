@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Optional
 
 import aiohttp
-from PIL import Image, ImageChops, ImageDraw, ImageOps
+from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageOps
 from pyrogram import enums, filters
 from pyrogram.errors import TopicClosed
 from pyrogram.types import (
@@ -198,7 +198,6 @@ async def _send_media_colored(chat_id: int, path: str, caption: str, buttons: li
     clean_caption = re.sub(r'<a\s+href=([^"\'>\s]+)>', r'<a href="\1">', caption)
     full_html = f'<img src="tg://photo?id=welcome_cover"/><br>{clean_caption.replace(chr(10), "<br>")}<br><br>{btn_html}'
 
-    # 1. Primary Method: sendRichMessage with multipart upload (attach://welcome_cover)
     rich_url = f"https://api.telegram.org/bot{config.BOT_TOKEN}/sendRichMessage"
     try:
         rich_payload = {
@@ -224,7 +223,6 @@ async def _send_media_colored(chat_id: int, path: str, caption: str, buttons: li
     except Exception as e:
         logger.debug(f"Welcome direct sendRichMessage multipart failed: {e}")
 
-    # 2. Fallback Method: sendPhoto with styled inline_keyboard JSON
     photo_url = f"https://api.telegram.org/bot{config.BOT_TOKEN}/sendPhoto"
     try:
         form = aiohttp.FormData()
@@ -267,33 +265,63 @@ def _circle(im: Image.Image, d: int) -> Image.Image:
 
 
 # ─────────────────────── CARD RENDERING ───────────────────────
-AV_CENTER = (424, 435)   # centre of the dark disc inside the rainbow ring
-AV_RADIUS = 176          # photo radius (covers the placeholder silhouette)
-BADGE_BOX = (326, 570, 524, 632)  # "JOINED" pill - restored on top of the photo
+AV_CENTER = (424, 435)
+AV_RADIUS = 176
+BADGE_BOX = (326, 570, 524, 632)
 BADGE_RADIUS = 31
 NAME_X, NAME_CAP_TOP, NAME_SIZE, NAME_MAXW = 704, 385, 76, 600
 ID_X, ID_CAP_TOP, USER_CAP_TOP, ROW_SIZE, ROW_MAXW = 840, 523, 624, 37, 600
 FONT_NAME, FONT_ROW = "Poppins-Bold.ttf", "Poppins-Medium.ttf"
 TEXT_DARK = (34, 30, 72, 255)
-NAME_GRAD = ((92, 70, 226), (150, 72, 232), (214, 62, 172))  # blue-violet -> violet -> pink
+NAME_GRAD = ((92, 70, 226), (150, 72, 232), (214, 62, 172))
+
+
+def _load_ttf(font_name: str, size: int):
+    candidates = [
+        _BASE / "fonts" / font_name,
+        _BASE / font_name,
+        Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
+        Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+    ]
+    for p in candidates:
+        if p.exists():
+            try:
+                return ImageFont.truetype(str(p), size)
+            except Exception:
+                pass
+    return ImageFont.load_default()
 
 
 def _cap_offset(size: int, font: str) -> int:
     """Pixels between the top of a draw_text() canvas and the top of a capital letter."""
     probe = Image.new("RGBA", (size * 3, size * 3), (0, 0, 0, 0))
-    draw_text(probe, (0, 0), "H", size, fill=(255, 255, 255, 255), primary=font)
+    try:
+        draw_text(probe, (0, 0), "H", size, fill=(255, 255, 255, 255), primary=font)
+    except Exception:
+        pass
     bbox = probe.getbbox()
     return bbox[1] if bbox else 0
 
 
 def _put_text(img, x, cap_top, text, size, maxw, font, fill=None, gradient=None):
-    """Draw text so that the capital-letter top sits on `cap_top`.  fill = solid colour, gradient = colour stops."""
+    """Draw text so that the capital-letter top sits on `cap_top`."""
+    str_text = str(text)
     layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
     off = _cap_offset(size, font)
-    draw_text(layer, (x, cap_top - off), text, size, fill=(255, 255, 255, 255), max_width=maxw, min_size=24, primary=font)
+    try:
+        draw_text(layer, (x, cap_top - off), str_text, size, fill=(255, 255, 255, 255), max_width=maxw, min_size=24, primary=font)
+    except Exception:
+        pass
+
+    if not layer.getbbox():
+        d = ImageDraw.Draw(layer)
+        ttf = _load_ttf(font, size)
+        d.text((x, cap_top), str_text, font=ttf, fill=(255, 255, 255, 255))
+
     bbox = layer.getbbox()
     if not bbox:
         return
+
     if gradient:
         w = max(1, bbox[2] - bbox[0])
         strip = Image.new("RGB", (w, 1))
@@ -306,6 +334,7 @@ def _put_text(img, x, cap_top, text, size, maxw, font, fill=None, gradient=None)
         tint.paste(strip.resize((w, img.height)), (bbox[0], 0))
     else:
         tint = Image.new("RGB", img.size, fill[:3])
+
     rgb = ImageChops.multiply(layer.convert("RGB"), tint)
     layer = Image.merge("RGBA", (*rgb.split(), layer.getchannel("A")))
     img.alpha_composite(layer)
@@ -326,12 +355,13 @@ def build_pic(av: str, fn: str, uid: int, un: str) -> str:
 
     d = AV_RADIUS * 2
     cx, cy = AV_CENTER
-    card.alpha_composite(_circle(Image.open(av), d), (cx - AV_RADIUS, cy - AV_RADIUS))
+    src_av = av if (av and os.path.isfile(av)) else FALLBACK_PIC
+    card.alpha_composite(_circle(Image.open(src_av), d), (cx - AV_RADIUS, cy - AV_RADIUS))
     card.paste(base, (0, 0), _badge_mask(card.size))
 
     _put_text(card, NAME_X, NAME_CAP_TOP, fn, NAME_SIZE, NAME_MAXW, FONT_NAME, gradient=NAME_GRAD)
-    _put_text(card, ID_X, ID_CAP_TOP, str(uid), ROW_SIZE, ROW_MAXW, FONT_ROW, fill=TEXT_DARK)
-    _put_text(card, ID_X, USER_CAP_TOP, un, ROW_SIZE, ROW_MAXW, FONT_ROW, fill=TEXT_DARK)
+    _put_text(card, ID_X, ID_CAP_TOP, f": {uid}", ROW_SIZE, ROW_MAXW, FONT_ROW, fill=TEXT_DARK)
+    _put_text(card, ID_X, USER_CAP_TOP, f": {un}", ROW_SIZE, ROW_MAXW, FONT_ROW, fill=TEXT_DARK)
 
     os.makedirs("downloads", exist_ok=True)
     path = f"downloads/welcome_{uid}.png"
@@ -429,16 +459,31 @@ def _get_card_sem() -> asyncio.Semaphore:
 async def _send_welcome(client, update: ChatMemberUpdated, user) -> None:
     cid = update.chat.id
     avatar = img = None
+    os.makedirs("downloads", exist_ok=True)
     pp_path = f"downloads/pp_{user.id}.png"
     try:
         async def _get_avatar():
-            if not user.photo:
+            photo_obj = getattr(user, "photo", None)
+            if not photo_obj:
+                try:
+                    full_user = await asyncio.wait_for(client.get_chat(user.id), timeout=5)
+                    photo_obj = getattr(full_user, "photo", None)
+                except Exception:
+                    photo_obj = None
+            if not photo_obj:
+                return FALLBACK_PIC
+            file_id = getattr(photo_obj, "big_file_id", None) or getattr(photo_obj, "small_file_id", None)
+            if not file_id:
                 return FALLBACK_PIC
             try:
                 got = await asyncio.wait_for(
-                    client.download_media(user.photo.big_file_id, file_name=pp_path), timeout=10
+                    client.download_media(file_id, file_name=pp_path), timeout=10
                 )
-                return got or FALLBACK_PIC
+                if got and os.path.isfile(got):
+                    return got
+                if os.path.isfile(pp_path):
+                    return pp_path
+                return FALLBACK_PIC
             except Exception:
                 return FALLBACK_PIC
 
@@ -451,7 +496,7 @@ async def _send_welcome(client, update: ChatMemberUpdated, user) -> None:
         avatar, members = await asyncio.gather(_get_avatar(), _count())
 
         name = user.first_name or "υsєʀ"
-        uname_txt = user.username or "No Username"
+        uname_txt = f"@{user.username}" if user.username else "No Username"
         async with _get_card_sem():
             img = await asyncio.to_thread(build_pic, avatar, name, user.id, uname_txt)
 

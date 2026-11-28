@@ -30,10 +30,9 @@ except ImportError:
 # ----------------------------------------------------------
 RAIN_EMOJIS = ["❤️", "🔥", "🥰", "❤️‍🔥", "💥", "🤩", "⚡️", "💯", "✨", "🏆"]
 
-# Telegram Message Effects (🔥 Fire, 🎉 Balloons/Confetti, ❤️ Hearts)
 EFFECT_IDS = [
     "5104841245755180586",  # 🔥 Fire
-    "5046509860389126442",  # 🎉 Celebration / Balloons
+    "5046509860389126442",  # 🎉 Celebration
     "5159385139981059251",  # ❤️ Hearts
 ]
 
@@ -60,7 +59,6 @@ async def _emoji_burst(chat_id: int, message_id: int, emoji: str):
 async def _loading_animation(message: types.Message):
     msg = None
     try:
-        # लोडिंग मैसेज पर भी effect_id ट्रिगर (अगर supported हो)
         try:
             msg = await message.reply_text(
                 _LOAD_FRAMES[0],
@@ -91,10 +89,6 @@ async def _loading_animation(message: types.Message):
 
 
 async def _double_animation(message: types.Message):
-    """एग्ज़ैक्ट डबल एनीमेशन:
-    1) पहला Big Emoji Explosion (❤️/🔥) + Loading Bar एक साथ
-    2) लोडिंग के बीच में दूसरा Big Emoji Explosion (🔥/🎉)
-    """
     e1 = random.choice(["❤️", "🔥", "❤️‍🔥"])
     e2 = random.choice(["🔥", "🎉", "💥", "🤩", "⚡️"])
 
@@ -110,7 +104,7 @@ async def _double_animation(message: types.Message):
 
 
 # ----------------------------------------------------------
-# 🎨 SMART RICH MESSAGE API WITH RICH HTML BUTTONS 🎨
+# 🎨 SMART RICH MESSAGE API + COLORED HTML BUTTONS FALLBACK 🎨
 # ----------------------------------------------------------
 def get_random_start_img():
     raw = getattr(config, "START_IMG", None)
@@ -123,7 +117,6 @@ def get_random_start_img():
 
 
 def _markup_to_tg_html(markup) -> str:
-    """InlineKeyboardMarkup / dict को <tg-button-row><tg-button> HTML में बदलता है।"""
     if not markup:
         return ""
     if isinstance(markup, str):
@@ -184,15 +177,21 @@ async def _send_rich_start(chat_id: int, photo_url: str, text: str):
 
     support_url = getattr(config, "SUPPORT_CHAT", None) or "https://t.me/mgb_not_free_coder"
     channel_url = getattr(config, "SUPPORT_CHANNEL", None) or "https://t.me/MGB_SUPPROT_GROUP"
+    owner_url = (
+        f"tg://openmessage?user_id={config.OWNER_ID}"
+        if getattr(config, "OWNER_ID", None)
+        else "https://t.me/MGB_NOT_FREE_1"
+    )
     safe_text = text.replace("\n", "<br>")
 
+    # 1) Try sendRichMessage first
     rich_body = (
         f"<blockquote>{safe_text}</blockquote><br><br>"
         f'<tg-button-row align="center">'
-        f'<tg-button type="url" style="primary" url="https://t.me/{app.username}?startgroup=true">ㅤㅤAᴅᴅ Mᴇ Tᴏ Yᴏᴜʀ Gʀᴏᴜᴘㅤㅤ</tg-button>'
+        f'<tg-button type="url" style="success" url="https://t.me/{app.username}?startgroup=true">ㅤㅤAᴅᴅ Mᴇ Tᴏ Yᴏᴜʀ Gʀᴏᴜᴘㅤㅤ</tg-button>'
         f"</tg-button-row>"
         f'<tg-button-row align="center">'
-        f'<tg-button type="callback" style="success" data="help">ㅤㅤHᴇʟᴘㅤㅤ</tg-button>'
+        f'<tg-button type="callback" style="primary" data="help">ㅤㅤHᴇʟᴘㅤㅤ</tg-button>'
         f"</tg-button-row>"
         f'<tg-button-row align="center">'
         f'<tg-button type="url" style="primary" url="{support_url}">ㅤSᴜᴘᴘᴏʀᴛㅤ</tg-button>'
@@ -203,10 +202,52 @@ async def _send_rich_start(chat_id: int, photo_url: str, text: str):
         "html": f'<img src="tg://photo?id=player_cover"/><br>{rich_body}',
         "media": [{"id": "player_cover", "media": {"type": "photo", "media": photo_url}}],
     }
-    url = f"https://api.telegram.org/bot{bot_token}/sendRichMessage"
+
+    timeout = aiohttp.ClientTimeout(total=15)
     try:
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15)) as session:
-            async with session.post(url, json={"chat_id": chat_id, "rich_message": rich_message}) as resp:
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(
+                f"https://api.telegram.org/bot{bot_token}/sendRichMessage",
+                json={"chat_id": chat_id, "rich_message": rich_message},
+            ) as resp:
+                result = await resp.json()
+                if result.get("ok"):
+                    return result["result"]
+    except Exception:
+        pass
+
+    # 2) Guaranteed fallback: sendPhoto with Colored Buttons (Green / Blue / Red)
+    kb = {
+        "inline_keyboard": [
+            [
+                {
+                    "text": "Add me to your group",
+                    "url": f"https://t.me/{app.username}?startgroup=true",
+                    "style": "success",
+                }
+            ],
+            [
+                {"text": "OWNER", "url": owner_url, "style": "primary"},
+                {"text": "Help", "callback_data": "help", "style": "primary"},
+            ],
+            [
+                {"text": "Channel", "url": channel_url, "style": "primary"},
+                {"text": "Support", "url": support_url, "style": "danger"},
+            ],
+        ]
+    }
+    try:
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(
+                f"https://api.telegram.org/bot{bot_token}/sendPhoto",
+                json={
+                    "chat_id": chat_id,
+                    "photo": photo_url,
+                    "caption": text,
+                    "parse_mode": "HTML",
+                    "reply_markup": kb,
+                },
+            ) as resp:
                 result = await resp.json()
                 if result.get("ok"):
                     return result["result"]
@@ -227,10 +268,57 @@ async def _send_rich_help(chat_id: int, photo_url: str, text: str, markup):
         "html": f'<img src="tg://photo?id=help_cover"/><br>{rich_body}',
         "media": [{"id": "help_cover", "media": {"type": "photo", "media": photo_url}}],
     }
-    url = f"https://api.telegram.org/bot{bot_token}/sendRichMessage"
+
+    timeout = aiohttp.ClientTimeout(total=15)
     try:
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15)) as session:
-            async with session.post(url, json={"chat_id": chat_id, "rich_message": rich_message}) as resp:
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(
+                f"https://api.telegram.org/bot{bot_token}/sendRichMessage",
+                json={"chat_id": chat_id, "rich_message": rich_message},
+            ) as resp:
+                result = await resp.json()
+                if result.get("ok"):
+                    return result["result"]
+    except Exception:
+        pass
+
+    # Guaranteed fallback: sendPhoto with Colored Help Buttons
+    rows = (
+        markup.get("inline_keyboard", [])
+        if isinstance(markup, dict)
+        else getattr(markup, "inline_keyboard", [])
+    )
+    kb_rows = []
+    for row in rows or []:
+        r = []
+        for btn in row:
+            if isinstance(btn, dict):
+                item = dict(btn)
+                item.setdefault("style", "primary")
+            else:
+                item = {"text": getattr(btn, "text", ""), "style": "primary"}
+                if getattr(btn, "url", None):
+                    item["url"] = btn.url
+                if getattr(btn, "callback_data", None):
+                    item["callback_data"] = btn.callback_data
+                    if item["callback_data"] in ("start", "help_main"):
+                        item["style"] = "success"
+            r.append(item)
+        if r:
+            kb_rows.append(r)
+
+    try:
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(
+                f"https://api.telegram.org/bot{bot_token}/sendPhoto",
+                json={
+                    "chat_id": chat_id,
+                    "photo": photo_url,
+                    "caption": text,
+                    "parse_mode": "HTML",
+                    "reply_markup": {"inline_keyboard": kb_rows},
+                },
+            ) as resp:
                 result = await resp.json()
                 if result.get("ok"):
                     return result["result"]
@@ -426,4 +514,4 @@ async def _new_member(_, message: types.Message):
             if await db.is_chat(message.chat.id):
                 return
             await db.add_chat(message.chat.id)
-            
+        

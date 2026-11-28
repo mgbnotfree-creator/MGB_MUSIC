@@ -3,25 +3,24 @@
 # All Rights Reserved.
 #
 # Project      : MGB API Telegram Music Bot
-# Powered By   : MGB NOT FREE (@MGB_NOT_FREE_1)
+# Powered By   : ❖ MGB NOT FREE (@MGB_NOT_FREE_1) ❖
 # Type         : API Based Telegram Music Bot
 #
 # Bot          : @Yasmeen_api_bot
 # Channel      : https://t.me/MGB_SUPPROT_GROUP
 # Group        : https://t.me/mgb_not_free_coder
-# GitHub       : https://github.com/mgbnotfree-creator/MGBMusic
+# GitHub       : https://github.com/mgbnotfree-creator/MGB_MUSIC
 #
 # Unauthorized copying, modification, or redistribution
 # of this source code without permission is prohibited.
 # ==========================================================
-#
-# Plugin       : Group welcome card (image + info + colored buttons)
-# Location     : MGBMUSIC/MGBBOTS/welcome.py
-# ==========================================================
+
 
 import asyncio
 import html
+import json
 import os
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
@@ -142,7 +141,7 @@ async def auto_on(chat_id: int) -> bool:
 
 
 # ═══════════════════════════════════════════════════════════
-#  COLORED BUTTONS  (Bot API HTTP, falls back to normal buttons)
+#  HTML COLORED BUTTONS (sendRichMessage + <tg-button>)
 # ═══════════════════════════════════════════════════════════
 _http: Optional[aiohttp.ClientSession] = None
 
@@ -155,11 +154,8 @@ def _get_session() -> aiohttp.ClientSession:
     return _http
 
 
-def styled_button(text: str, url: str, style: str = None) -> dict:
-    btn = {"text": text, "url": url}
-    if style:
-        btn["style"] = style  # "primary" (blue) | "success" (green) | "danger" (red)
-    return btn
+def styled_button(text: str, url: str, style: str = "primary") -> dict:
+    return {"text": text, "url": url, "style": style or "primary"}
 
 
 def _to_markup(buttons: list[list[dict]]) -> InlineKeyboardMarkup:
@@ -168,31 +164,79 @@ def _to_markup(buttons: list[list[dict]]) -> InlineKeyboardMarkup:
     )
 
 
-async def _send_media_colored(chat_id: int, path: str, caption: str, buttons: list[list[dict]]):
-    """Send a local photo through the Bot API so the buttons keep their colors.
+def _build_buttons_html(buttons: list[list[dict]]) -> str:
+    """Convert button rows into Rich HTML <tg-button-row> and <tg-button> tags."""
+    rows_html = []
+    for row in buttons:
+        btns_html = []
+        for b in row:
+            style = b.get("style") or "primary"
+            text = html.escape(str(b.get("text", "")))
+            if "url" in b:
+                url = html.escape(str(b["url"]), quote=True)
+                btns_html.append(f'<tg-button type="url" style="{style}" url="{url}">{text}</tg-button>')
+            elif "callback_data" in b:
+                data = html.escape(str(b["callback_data"]), quote=True)
+                btns_html.append(f'<tg-button type="callback" style="{style}" data="{data}">{text}</tg-button>')
+        if btns_html:
+            rows_html.append(f'<tg-button-row align="center">{"".join(btns_html)}</tg-button-row>')
+    return "".join(rows_html)
 
+
+async def _send_media_colored(chat_id: int, path: str, caption: str, buttons: list[list[dict]]):
+    """Send a local photo with Rich HTML Colored Buttons (<tg-button>) via sendRichMessage.
+
+    Falls back to standard Bot API sendPhoto if sendRichMessage is unsupported.
     Returns {"chat_id", "message_id"} on success, None on failure.
     """
     if not config.BOT_TOKEN:
         return None
 
-    method, field, fname, ctype = "sendPhoto", "photo", "welcome.png", "image/png"
-    url = f"https://api.telegram.org/bot{config.BOT_TOKEN}/{method}"
-    try:
-        import json
+    session = _get_session()
+    timeout = aiohttp.ClientTimeout(total=35, connect=10)
+    btn_html = _build_buttons_html(buttons)
+    clean_caption = re.sub(r'<a\s+href=([^"\'>\s]+)>', r'<a href="\1">', caption)
+    full_html = f'<img src="tg://photo?id=welcome_cover"/><br>{clean_caption.replace(chr(10), "<br>")}<br><br>{btn_html}'
 
+    # 1. Primary Method: sendRichMessage with multipart upload (attach://welcome_cover)
+    rich_url = f"https://api.telegram.org/bot{config.BOT_TOKEN}/sendRichMessage"
+    try:
+        rich_payload = {
+            "html": full_html,
+            "media": [
+                {
+                    "id": "welcome_cover",
+                    "media": {"type": "photo", "media": "attach://welcome_cover"},
+                }
+            ],
+        }
+        form = aiohttp.FormData()
+        form.add_field("chat_id", str(chat_id))
+        form.add_field("rich_message", json.dumps(rich_payload, ensure_ascii=False))
+        with open(path, "rb") as f:
+            form.add_field("welcome_cover", f.read(), filename="welcome.png", content_type="image/png")
+
+        async with session.post(rich_url, data=form, timeout=timeout) as resp:
+            data = await resp.json(content_type=None)
+        if data.get("ok"):
+            res = data["result"]
+            return {"chat_id": res["chat"]["id"], "message_id": res["message_id"]}
+    except Exception as e:
+        logger.debug(f"Welcome direct sendRichMessage multipart failed: {e}")
+
+    # 2. Fallback Method: sendPhoto with styled inline_keyboard JSON
+    photo_url = f"https://api.telegram.org/bot{config.BOT_TOKEN}/sendPhoto"
+    try:
         form = aiohttp.FormData()
         form.add_field("chat_id", str(chat_id))
         form.add_field("caption", caption)
         form.add_field("parse_mode", "HTML")
         form.add_field("reply_markup", json.dumps({"inline_keyboard": buttons}))
         with open(path, "rb") as f:
-            form.add_field(field, f.read(), filename=fname, content_type=ctype)
+            form.add_field("photo", f.read(), filename="welcome.png", content_type="image/png")
 
-        timeout = aiohttp.ClientTimeout(total=30, connect=8)
-        session = _get_session()
-        async with session.post(url, data=form, timeout=timeout) as resp:
-            data = await resp.json()
+        async with session.post(photo_url, data=form, timeout=timeout) as resp:
+            data = await resp.json(content_type=None)
         if data.get("ok"):
             res = data["result"]
             return {"chat_id": res["chat"]["id"], "message_id": res["message_id"]}
@@ -223,9 +267,6 @@ def _circle(im: Image.Image, d: int) -> Image.Image:
 
 
 # ─────────────────────── CARD RENDERING ───────────────────────
-# The artwork (glass card, ring, JOINED badge, ID / @ pills, brand) is the ready-made PNG.
-# We only fill in: profile photo, name (gradient), user id and username.
-# Coordinates are for the 1672x941 template.
 AV_CENTER = (424, 435)   # centre of the dark disc inside the rainbow ring
 AV_RADIUS = 176          # photo radius (covers the placeholder silhouette)
 BADGE_BOX = (326, 570, 524, 632)  # "JOINED" pill - restored on top of the photo
@@ -241,7 +282,8 @@ def _cap_offset(size: int, font: str) -> int:
     """Pixels between the top of a draw_text() canvas and the top of a capital letter."""
     probe = Image.new("RGBA", (size * 3, size * 3), (0, 0, 0, 0))
     draw_text(probe, (0, 0), "H", size, fill=(255, 255, 255, 255), primary=font)
-    return probe.getbbox()[1]
+    bbox = probe.getbbox()
+    return bbox[1] if bbox else 0
 
 
 def _put_text(img, x, cap_top, text, size, maxw, font, fill=None, gradient=None):
@@ -264,7 +306,6 @@ def _put_text(img, x, cap_top, text, size, maxw, font, fill=None, gradient=None)
         tint.paste(strip.resize((w, img.height)), (bbox[0], 0))
     else:
         tint = Image.new("RGB", img.size, fill[:3])
-    # multiply keeps coloured emoji looking right while plain letters take the tint
     rgb = ImageChops.multiply(layer.convert("RGB"), tint)
     layer = Image.merge("RGBA", (*rgb.split(), layer.getchannel("A")))
     img.alpha_composite(layer)
@@ -283,7 +324,6 @@ def build_pic(av: str, fn: str, uid: int, un: str) -> str:
     card = Image.open(CARD_PATH).convert("RGBA")
     base = card.copy()
 
-    # profile photo inside the ring, then bring the JOINED badge back on top of it
     d = AV_RADIUS * 2
     cx, cy = AV_CENTER
     card.alpha_composite(_circle(Image.open(av), d), (cx - AV_RADIUS, cy - AV_RADIUS))
@@ -340,7 +380,6 @@ async def welcome(client, update: ChatMemberUpdated):
 
     if not (new and new.status == enums.ChatMemberStatus.MEMBER):
         return
-    # Welcome regular users AND other bots; only skip this music bot itself.
     if new.user.id == client.me.id:
         return
 
@@ -371,8 +410,6 @@ async def welcome(client, update: ChatMemberUpdated):
         except Exception:
             return
 
-    # Heavy work (avatar download, card render, upload) runs in the background so the
-    # update worker is freed at once and one slow join can't delay the next ones.
     task = asyncio.create_task(_send_welcome(client, update, new.user))
     _bg_tasks.add(task)
     task.add_done_callback(_bg_tasks.discard)
@@ -385,7 +422,7 @@ _card_sem: Optional[asyncio.Semaphore] = None
 def _get_card_sem() -> asyncio.Semaphore:
     global _card_sem
     if _card_sem is None:
-        _card_sem = asyncio.Semaphore(3)  # max 3 cards rendering at once (CPU friendly)
+        _card_sem = asyncio.Semaphore(3)
     return _card_sem
 
 
@@ -403,7 +440,7 @@ async def _send_welcome(client, update: ChatMemberUpdated, user) -> None:
                 )
                 return got or FALLBACK_PIC
             except Exception:
-                return FALLBACK_PIC  # slow / failed photo download -> don't make the welcome late
+                return FALLBACK_PIC
 
         async def _count():
             try:
@@ -411,7 +448,6 @@ async def _send_welcome(client, update: ChatMemberUpdated, user) -> None:
             except Exception:
                 return "?"
 
-        # run both network calls at the same time
         avatar, members = await asyncio.gather(_get_avatar(), _count())
 
         name = user.first_name or "υsєʀ"
@@ -427,6 +463,7 @@ async def _send_welcome(client, update: ChatMemberUpdated, user) -> None:
             count=members,
         )
 
+        # 🔥 HTML Colour Styles: "primary" (Blue), "success" (Green), "danger" (Red)
         buttons = [
             [styled_button(BTN_VIEW, f"tg://openmessage?user_id={user.id}", "primary")],
             [styled_button(BTN_ADD, f"https://t.me/{app.username}?startgroup=true", "success")],
@@ -434,12 +471,11 @@ async def _send_welcome(client, update: ChatMemberUpdated, user) -> None:
 
         try:
             sent = await _send_media_colored(cid, img, caption, buttons)
-            if not sent:  # Bot API failed -> normal (uncolored) buttons via pyrogram
+            if not sent:
                 sent = await client.send_photo(cid, img, caption=caption, reply_markup=_to_markup(buttons))
         except TopicClosed:
             return
 
-        # keep only the last WELCOME_LIMIT welcome messages in the chat
         last_messages.setdefault(cid, []).append(sent)
         if len(last_messages[cid]) > WELCOME_LIMIT:
             old_msg = last_messages[cid].pop(0)
@@ -468,7 +504,7 @@ async def _send_welcome(client, update: ChatMemberUpdated, user) -> None:
                     pass
 
 
-# ─────────────── warm-up: load fonts once at startup (first welcome was the slowest) ───────────────
+# ─────────────── warm-up: load fonts once at startup ───────────────
 def _warm_fonts() -> None:
     try:
         probe = Image.new("RGBA", (500, 200), (0, 0, 0, 0))
